@@ -1,0 +1,12 @@
+# Mac setup for AI agents (not for nontechnical users)
+
+Use an authorized Mac (Apple Silicon is fine if the installed PaddlePaddle wheel supports its OS/Python version). Use a fresh virtual environment, local book working directory, and no changes to system Python or global packages. Do not run on a shared production server.
+
+1. Check `python3 --version`, `swiftc --version`, available disk space and CPU/memory. Prefer a supported Python 3.10–3.12 available for both Apple Vision Swift helper and PaddleOCR. Do not overwrite other environments.
+2. Create `.venv` and install `requirements.txt`, plus the documented PaddlePaddle inference engine and `paddleocr[doc-parser]` 3.x in that venv. Verify `import paddle`, `from paddleocr import PPStructureV3`, and `import fitz, PIL`. PaddlePaddle wheel compatibility differs between macOS/Python versions: consult the **official installation instructions** and stop if no supported Mac wheel is available; do not force unsupported binary installations. Official docs: https://www.paddleocr.ai/main/en/version3.x/installation.html and https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/PP-StructureV3.html
+3. Run a **one-page test** of both OCR engines. PP-StructureV3 may download models on first run: obtain permission for any downloads and keep cache in a local user-owned environment. Then run 3–5 representative pages before processing the entire book.
+4. Use `python scripts/mac_hybrid_ocr.py "input.pdf" --work-dir ./work`. The script calls Apple Vision and PP-StructureV3 on the same rendered images. To resume, rerun unchanged command; checksum guards prevent accidental cache reuse across different inputs.
+5. Inspect `work/fusion/OCR_REVIEW.json` and each page report. Carefully inspect `paddle_raw_not_in_markdown` as well as cross-engine disagreements. Read raw Paddle `overall_ocr_res.rec_texts` **rather than** treating Markdown or the report as authoritative text.
+6. If installation or model inference fails, report the **real error** and do not pretend both engines ran. Only use a single-engine alternative with the user's informed approval; label the lower-evidence QA accordingly.
+
+The OCR comparison utility emits candidate issues. It does not magically correct text, typeset the final PDF, or prove the output matches the original scan. Source-review and final PDF QA are separate gates.
