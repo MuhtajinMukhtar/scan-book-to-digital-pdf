@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+work/
+output/
+*.pdf
+*.zip
+QA.json
+manifest.json
+.DS_Store
