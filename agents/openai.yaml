@@ -1,4 +1,4 @@
 interface:
   display_name: "Scan Book to Digital PDF"
-  short_description: "OCR and editorially reconstruct scanned books"
-  default_prompt: "Use $scan-book-to-digital-pdf for my scanned PDF. Ask for font family, size, and indentation only if needed; preserve layout and verify each page."
+  short_description: "Turn scanned books into readable, searchable PDFs"
+  default_prompt: "Tolong ubah PDF buku ini menjadi buku digital yang nyaman dibaca. Pandu saya dengan pilihan sederhana."
