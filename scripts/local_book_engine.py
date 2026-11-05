@@ -186,13 +186,18 @@ def italic_font_file(regular: Path) -> Path | None:
         "Arial.ttf": "Arial Italic.ttf",
         "Georgia.ttf": "Georgia Italic.ttf",
         "Times New Roman.ttf": "Times New Roman Italic.ttf",
+        "DejaVuSans.ttf": "DejaVuSans-Oblique.ttf",
+        "DejaVuSerif.ttf": "DejaVuSerif-Italic.ttf",
     }
-    candidates = [regular.with_name(variants[regular.name])] if regular.name in variants else []
-    candidates.extend([
-        regular.with_name(regular.name.replace("-Regular", "-Italic")),
-        regular.with_name(regular.stem + "-Italic" + regular.suffix),
-    ])
-    return next((path for path in candidates if path.is_file()), None)
+    candidates = []
+    if regular.name in variants:
+        candidates.append(regular.with_name(variants[regular.name]))
+    if "-Regular" in regular.name:
+        candidates.append(regular.with_name(regular.name.replace("-Regular", "-Italic")))
+    candidates.append(regular.with_name(regular.stem + "-Italic" + regular.suffix))
+    # Never silently treat the upright font as its own italic variant.
+    return next((candidate for candidate in candidates
+                 if candidate != regular and candidate.is_file()), None)
 
 
 def paint_line(page: fitz.Page, text: str, x: float, baseline: float, width_limit: float,
