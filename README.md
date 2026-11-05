@@ -68,7 +68,7 @@ Jika buku memuat tabel maupun ilustrasi, tampilkan masing-masing contoh sebelum 
 
 ## Kualitas dan keterbatasan
 
-Skrip otomatis saat ini menata ulang **teks biasa** dengan tipografi terkontrol. Halaman bergambar, tabel, banyak cetak miring, atau teks yang belum terverifikasi **bisa tetap memakai scan asli yang searchable** dan harus ditandai untuk review. Hasil belum tentu setara dengan pilot manual yang dulu dipoles oleh agen High.
+Skrip otomatis saat ini menata ulang **teks biasa** dengan tipografi terkontrol. Halaman bergambar, tabel, banyak cetak miring, atau teks yang belum terverifikasi **bisa tetap memakai scan asli yang searchable** dan harus ditandai untuk review. **Scan fallback adalah hasil sementara, bukan contoh digital yang boleh disetujui sebagai dasar konversi seluruh buku.** Jika satu saja halaman pilot masih fallback, statusnya `PILOT_NEEDS_LAYOUT_WORK` dan `approve` ditolak. Gambar/foto sumber boleh tetap berupa gambar, tetapi teks di sekitarnya dan sel tabel harus direkonstruksi secara digital sebelum approval. Hasil belum tentu setara dengan pilot manual yang dulu dipoles oleh agen High.
 
 **Aturan wajib:** PDF sumber dan hasil mempunyai jumlah serta ukuran halaman yang sama. Tidak boleh ada paragraf atau gambar yang diam-diam meluber ke halaman berikut. Untuk buku penuh, setiap halaman harus diverifikasi terhadap sumber menggunakan [audit per halaman](references/page-fidelity.md). Laporan otomatis bukan jaminan karakter demi karakter.
 
