@@ -103,12 +103,12 @@ def reconcile(apple: dict, paddle: dict, markdown: str | None = None) -> dict:
     }
 
 
-def compare_cached(work_dir: Path, start: int = 1, end: int | None = None) -> dict:
+def compare_cached(work_dir: Path, start: int = 1, end: int | None = None, page_subset: set[int] | None = None) -> dict:
     ocr = work_dir / "ocr"
     output = work_dir / "fusion"
     output.mkdir(parents=True, exist_ok=True)
     pages = sorted(ocr.glob("page_*.json"))
-    pages = [p for p in pages if p.stem[5:].isdigit() and int(p.stem[5:]) >= start and (end is None or int(p.stem[5:]) <= end)]
+    pages = [p for p in pages if p.stem[5:].isdigit() and int(p.stem[5:]) >= start and (end is None or int(p.stem[5:]) <= end) and (page_subset is None or int(p.stem[5:]) in page_subset)]
     if not pages:
         raise ValueError("No Apple Vision page JSON found; cannot compare OCR")
     summary = {"pages": 0, "pages_with_issues": [], "candidate_issues": 0, "mode": "Apple Vision + PaddleOCR PP-StructureV3", "status": "SOURCE_VISUAL_REVIEW_REQUIRED"}
@@ -137,7 +137,7 @@ def compare_cached(work_dir: Path, start: int = 1, end: int | None = None) -> di
     return summary
 
 
-def run_hybrid(source: Path, work_dir: Path, dpi: int, start: int, end: int | None, languages: str) -> None:
+def run_hybrid(source: Path, work_dir: Path, dpi: int, start: int, end: int | None, languages: str, page_subset: set[int] | None = None) -> None:
     if platform.system() != "Darwin":
         raise RuntimeError("Full hybrid run requires macOS Apple Vision. Use --compare-only on other OSes.")
     if not source.is_file() or source.suffix.lower() != ".pdf":
@@ -152,17 +152,17 @@ def run_hybrid(source: Path, work_dir: Path, dpi: int, start: int, end: int | No
                "--start-page", str(start), "--languages", languages]
     if end is not None:
         command += ["--end-page", str(end)]
+    if page_subset is not None:
+        command += ["--pages", ",".join(str(i) for i in sorted(page_subset))]
     subprocess.run(command, check=True)
-    try:
-        from paddleocr import PPStructureV3
-    except ImportError as exc:
-        raise RuntimeError("PaddleOCR PP-StructureV3 missing. See references/mac-setup.md; no Apple-only shortcut.") from exc
-    pipeline = PPStructureV3(use_doc_orientation_classify=False, use_doc_unwarping=False)
+    # Lazy-load the expensive Paddle model only when a new OCR page is needed.
+    # Editing layout or rerunning a cached pilot must not reload its model.
+    pipeline = None
     target_dir = work_dir / "paddle"
     target_dir.mkdir(parents=True, exist_ok=True)
     for apple_path in sorted((work_dir / "ocr").glob("page_*.json")):
         page = int(apple_path.stem.split("_")[-1])
-        if page < start or (end is not None and page > end):
+        if page < start or (end is not None and page > end) or (page_subset is not None and page not in page_subset):
             continue
         image = work_dir / "page_images" / f"page_{page:03d}.jpg"
         result_path = target_dir / f"page_{page:03d}.json"
@@ -173,6 +173,12 @@ def run_hybrid(source: Path, work_dir: Path, dpi: int, start: int, end: int | No
                 raise RuntimeError(f"Paddle cache mismatch or incomplete page {page}; keep old files for inspection")
             print(f"PADDLE CACHED {page}", flush=True)
             continue
+        if pipeline is None:
+            try:
+                from paddleocr import PPStructureV3
+            except ImportError as exc:
+                raise RuntimeError("PaddleOCR PP-StructureV3 missing. See references/mac-setup.md; no Apple-only shortcut.") from exc
+            pipeline = PPStructureV3(use_doc_orientation_classify=False, use_doc_unwarping=False)
         predictions = pipeline.predict(input=str(image))
         for item in predictions:
             item.save_to_json(save_path=str(result_path))
@@ -185,7 +191,7 @@ def run_hybrid(source: Path, work_dir: Path, dpi: int, start: int, end: int | No
         print(f"PADDLE OCR {page}", flush=True)
     if digest(source) != source_sha:
         raise RuntimeError("Original PDF hash changed during OCR; stop")
-    report = compare_cached(work_dir, start, end)
+    report = compare_cached(work_dir, start, end, page_subset=page_subset)
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 
@@ -194,20 +200,30 @@ def main() -> int:
     p.add_argument("source", nargs="?", type=Path)
     p.add_argument("--work-dir", type=Path, required=True)
     p.add_argument("--dpi", type=int, default=230)
+    p.add_argument("--pages", help="Sparse pilot pages: 18,40,74; one Paddle model load for all selected pages")
     p.add_argument("--start-page", type=int, default=1)
     p.add_argument("--end-page", type=int)
     p.add_argument("--languages", default="id-ID,en-US")
     p.add_argument("--compare-only", action="store_true", help="Compare cached raw Apple/Paddle outputs without running OCR")
     a = p.parse_args()
     try:
+        selection = None
+        if a.pages:
+            try:
+                parsed = [int(x.strip()) for x in a.pages.split(",") if x.strip()]
+            except ValueError:
+                p.error("--pages requires integers separated by commas")
+            if not parsed or len(parsed) != len(set(parsed)) or min(parsed) < 1:
+                p.error("Invalid or duplicate --pages values")
+            selection = set(parsed)
         if a.compare_only:
-            print(json.dumps(compare_cached(a.work_dir, a.start_page, a.end_page), ensure_ascii=False, indent=2))
+            print(json.dumps(compare_cached(a.work_dir, a.start_page, a.end_page, page_subset=selection), ensure_ascii=False, indent=2))
         else:
             if a.source is None:
                 p.error("Source PDF required unless --compare-only")
             if a.dpi < 100 or a.dpi > 400:
                 p.error("DPI must be 100–400")
-            run_hybrid(a.source, a.work_dir, a.dpi, a.start_page, a.end_page, a.languages)
+            run_hybrid(a.source, a.work_dir, a.dpi, a.start_page, a.end_page, a.languages, page_subset=selection)
     except (ValueError, RuntimeError, subprocess.CalledProcessError, FileNotFoundError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
