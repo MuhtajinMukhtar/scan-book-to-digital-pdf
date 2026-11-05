@@ -79,6 +79,13 @@ class OneClickWorkflowTests(unittest.TestCase):
                 self.assertGreater(len(result[0].get_text("text")),100)
             style=work/"pilot/style-profile.json"
             profile=json.loads(style.read_text())
+            newest=profile["engine_version"]
+            profile["engine_version"]=newest-1
+            style.write_text(json.dumps(profile))
+            outdated=run("full",*common,"--skip-ocr")
+            self.assertEqual(outdated.returncode,2)
+            self.assertIn("layout algorithm changed",outdated.stderr)
+            profile["engine_version"]=newest
             profile["body_font_size_pt"]=18
             style.write_text(json.dumps(profile))
             blocked=run("full",*common,"--skip-ocr")
