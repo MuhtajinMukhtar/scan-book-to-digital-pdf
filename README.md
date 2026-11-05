@@ -42,7 +42,7 @@ Untuk memeriksa hasil yang ada tanpa menjalankan ulang OCR:
 python scripts/mac_hybrid_ocr.py --work-dir ./work --compare-only
 ```
 
-**Jangan menjalankan seluruh buku sebelum pengguna menyetujui contoh PDF.** Sesudah persetujuan, agen melanjutkan OCR dan rekontruksi seluruh halaman dengan gaya tulisan yang dikunci dari pilot. Setelah agen merekonstruksi dan menghasilkan PDF digital, **wajib** gunakan `scripts/page_fidelity_audit.py` untuk membandingkan **setiap halaman sumber dengan halaman hasil bernomor sama**, lalu `scripts/pdf_audit.py`, pemeriksaan visual terhadap scan, serta manifest per halaman. File PDF hasil tetap berstatus **REVIEW** sampai disetujui.
+**Jangan menjalankan seluruh buku sebelum pengguna menyetujui contoh PDF.** Sesudah persetujuan, agen melanjutkan OCR dan rekontruksi seluruh halaman dengan gaya tulisan yang dikunci dari pilot. Setelah agen merekonstruksi dan menghasilkan PDF digital, **wajib** gunakan `scripts/page_fidelity_audit.py` untuk membandingkan **setiap halaman sumber dengan halaman hasil bernomor sama**, berdasarkan teks referensi yang sudah dicek terhadap Apple Vision, PaddleOCR, dan scan asli, lalu `scripts/pdf_audit.py`, pemeriksaan visual terhadap scan, serta manifest per halaman. File PDF hasil tetap berstatus **REVIEW** sampai disetujui.
 
 **Tanggung jawab:** Pastikan Anda berhak memproses buku. Jangan mengunggah salinan buku berhak cipta, dokumen pribadi, cache OCR buku, atau berkas font berlisensi ke repo publik. Repo ini menyediakan kode dan panduan, bukan berkas buku.
 
