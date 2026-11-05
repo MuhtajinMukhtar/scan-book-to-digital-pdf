@@ -23,7 +23,7 @@ class OneClickWorkflowTests(unittest.TestCase):
             root = Path(tmp)
             work = root / "work"
             (work / "ocr").mkdir(parents=True)
-            (work / "fusion").mkdir(parents=True)
+            (work / "fusion_safe").mkdir(parents=True)
             src = root / "book.pdf"
             pdf = fitz.open()
             records = []
@@ -48,8 +48,9 @@ class OneClickWorkflowTests(unittest.TestCase):
             for i, lines in enumerate(records, 1):
                 (work/"ocr"/f"page_{i:03d}.json").write_text(json.dumps({
                     "page":i,"source_sha256":source_hash,"engine":"apple-vision","lines":lines}))
-                (work/"fusion"/f"page_{i:03d}.json").write_text(json.dumps({
-                    "page":i,"source_sha256":source_hash,"issues":[]}))
+                (work/"fusion_safe"/f"page_{i:03d}.json").write_text(json.dumps({
+                    "page":i,"source_sha256":source_hash,"issues":[],
+                    "primary_engine":"apple-vision","secondary_engine":"tesseract"}))
             def run(*rest):
                 return subprocess.run([sys.executable,str(DRIVER),*rest],
                         capture_output=True,text=True)
