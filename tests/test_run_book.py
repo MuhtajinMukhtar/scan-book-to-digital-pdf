@@ -71,7 +71,9 @@ class OneClickWorkflowTests(unittest.TestCase):
             a=run("approve",*common,"--confirm","APPROVE_PILOT")
             self.assertEqual(a.returncode,0,a.stdout+"\n"+a.stderr)
             f=run("full",*common,"--skip-ocr")
-            self.assertEqual(f.returncode,0,f.stdout+"\n"+f.stderr)
+            gate_file=work/"output"/"Book_Full_REVIEW.digital-policy.json"
+            gate_info=(gate_file.read_text() if gate_file.is_file() else "No digital policy report")
+            self.assertEqual(f.returncode,0,f.stdout+"\n"+f.stderr+"\n"+gate_info)
             with fitz.open(work/"output/Book_Full_REVIEW.pdf") as result:
                 self.assertEqual(len(result),2)
                 self.assertGreater(len(result[0].get_text("text")),100)
