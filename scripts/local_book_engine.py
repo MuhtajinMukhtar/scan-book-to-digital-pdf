@@ -2,8 +2,7 @@
 """Deterministic, low-token first-pass book composer from cached OCR.
 
 This engine does not call an LLM or run heavyweight OCR. It consumes the
-Apple-Vision cache and PaddleOCR fusion report already produced by
-mac_hybrid_ocr.py, renders conservative text-only pages as visible PDF text,
+Apple Vision cache and optional selective PP-OCRv5 Mobile review, renders conservative text-only pages as visible PDF text,
 and preserves complicated pages as searchable scans with explicit QA flags.
 
 No output is accepted as editorially verified without source-page review.
@@ -92,6 +91,11 @@ def load_cache(work: Path, number: int, source_sha: str, require_hybrid: bool, f
         fused = json.loads(fusion_file.read_text(encoding="utf-8"))
         if fused.get("page") != number or fused.get("source_sha256") != source_sha:
             raise ValueError(f"Fusion identity/source mismatch on page {number}")
+        if fusion_subdir == "fusion_mobile" and (
+            fused.get("primary_engine") != "apple-vision" or
+            fused.get("secondary_engine") != "paddle-ppocrv5-mobile"
+        ):
+            raise ValueError(f"Selective OCR evidence must be Apple Vision + Paddle Mobile on page {number}")
         if fusion_subdir == "fusion_safe" and (
             fused.get("primary_engine") != "apple-vision" or
             fused.get("secondary_engine") != "tesseract"
@@ -268,7 +272,7 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         # The safe Tesseract second opinion is often more noisy than Apple Vision.
         # It is a QA warning, not a reason to discard every otherwise safe
         # visible pilot page. Keep the result explicitly unverified.
-        if issues and fusion_subdir != "fusion_safe":
+        if issues and fusion_subdir not in ("fusion_safe", "fusion_mobile"):
             reasons.append("Apple/Paddle disagreement awaiting source review")
         ink_score = unrecognized_ink(src, lines)
         if ink_score > 1:
@@ -282,8 +286,18 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
                 output.delete_page(len(output) - 1)
         if reasons:
             fallback_page(output, doc, number - 1, lines)
+        review_file = work / "review" / f"page_{number:03d}.json"
+        review_status = None
+        review_reasons = []
+        if review_file.is_file():
+            review_data = json.loads(review_file.read_text(encoding="utf-8"))
+            if review_data.get("source_sha256") != source_sha or review_data.get("page") != number:
+                raise ValueError(f"Review cache does not match source page {number}")
+            review_status = review_data.get("secondary_status")
+            review_reasons = review_data.get("assessment", {}).get("reasons", [])
         rows.append({"source_page": number, "output_page": len(output),
-                     "mode": mode_name, "ocr_issues": len(issues), "ocr_review_required": bool(issues),
+                     "mode": mode_name, "ocr_issues": len(issues),
+                     "ocr_review_required": bool(issues or review_reasons), "ocr_secondary_status": review_status,
                      "detected_nontext_ink_score": round(ink_score, 3),
                      "reasons": reasons})
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -301,7 +315,11 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
     temp.replace(dest)
     counts = Counter(row["mode"] for row in rows)
     report = {"status": "REVIEW_REQUIRED", "note": "Not an editorial fidelity certification.",
-              "source_sha256": source_sha, "ocr_backend": ("apple-vision+tesseract" if fusion_subdir == "fusion_safe" else "legacy-paddle"), "source_page_count": len(doc),
+              "source_sha256": source_sha,
+              "ocr_backend": ("apple-vision-primary+paddle-mobile-selective" if fusion_subdir == "fusion_mobile"
+                              else "apple-vision+tesseract" if fusion_subdir == "fusion_safe"
+                              else "legacy-paddle"),
+              "source_page_count": len(doc),
               "output_page_count": len(page_list), "mapping": page_list,
               "font_family": family, "font_file_name": fontfile.name,
               "body_font_size_pt": size, "digital_pages": counts["born_digital_unverified"],
