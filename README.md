@@ -66,6 +66,16 @@ Mesin PDF sekarang merapikan **jarak antarbaris dalam paragraf**, menstabilkan p
 
 Jika buku memuat tabel maupun ilustrasi, tampilkan masing-masing contoh sebelum approval buku penuh. **Halaman yang masih berupa scan fallback wajib diberi tahu**, bukan diklaim sebagai halaman digital yang telah ditata ulang.
 
+## Kebijakan: semua halaman teks wajib digital, kecuali cover
+
+**Semua halaman yang mengandung teks wajib ditata ulang menjadi teks PDF yang benar-benar digital.** Termasuk teks di dalam tabel, kutipan, judul bab, footer, dan teks di samping ilustrasi. Foto, gambar dan ornamen boleh dipertahankan sebagai aset visual, bukan sebagai scan seluruh halaman.
+
+**Hanya cover depan/belakang yang telah diperiksa dari sumber asli** boleh tetap gambar satu halaman penuh. AI mencatat pengecualiannya di `work/cover-evidence.json` tanpa meminta pengguna mengetik konfigurasi teknis. Jika tidak ada bukti pemeriksaan cover, halaman tersebut tidak otomatis dikecualikan.
+
+Setelah pemrosesan, program menjalankan pemeriksaan di [aturan digitalisasi wajib](references/digital-text-policy.md). Bila ada halaman non-cover yang masih berupa scan, status hasil adalah **`INCOMPLETE_DIGITAL_PAGES`**, dengan daftar nomor halaman yang perlu diperbaiki. Buku **belum dianggap selesai**, meskipun dokumen review tetap disimpan.
+
+**Catatan:** pengamanan ini belum berarti mesin sudah mampu merekonstruksi semua tabel dan layout bergambar secara otomatis. Kualitas itu harus dibuktikan melalui pilot dan pemeriksaan sumber, bukan dijanjikan hanya karena aturan dibuat.
+
 ## Kualitas dan keterbatasan
 
 Skrip otomatis saat ini menata ulang **teks biasa** dengan tipografi terkontrol. Halaman bergambar, tabel, banyak cetak miring, atau teks yang belum terverifikasi **bisa tetap memakai scan asli yang searchable** dan harus ditandai untuk review. **Scan fallback adalah hasil sementara, bukan contoh digital yang boleh disetujui sebagai dasar konversi seluruh buku.** Jika satu saja halaman pilot masih fallback, statusnya `PILOT_NEEDS_LAYOUT_WORK` dan `approve` ditolak. Gambar/foto sumber boleh tetap berupa gambar, tetapi teks di sekitarnya dan sel tabel harus direkonstruksi secara digital sebelum approval. Hasil belum tentu setara dengan pilot manual yang dulu dipoles oleh agen High.
