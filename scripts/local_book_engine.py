@@ -20,6 +20,7 @@ import sys
 
 import fitz
 from PIL import Image, ImageDraw
+from page_typography import split_footer, plan_body, verified_italics, styled_tokens
 
 
 def sha256(path: Path) -> str:
@@ -180,43 +181,149 @@ def add_hidden_ocr(page: fitz.Page, lines: list[dict], bounds: fitz.Rect) -> Non
             pass
 
 
+def italic_font_file(regular: Path) -> Path | None:
+    variants = {
+        "Arial.ttf": "Arial Italic.ttf",
+        "Georgia.ttf": "Georgia Italic.ttf",
+        "Times New Roman.ttf": "Times New Roman Italic.ttf",
+    }
+    candidates = [regular.with_name(variants[regular.name])] if regular.name in variants else []
+    candidates.extend([
+        regular.with_name(regular.name.replace("-Regular", "-Italic")),
+        regular.with_name(regular.stem + "-Italic" + regular.suffix),
+    ])
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def paint_line(page: fitz.Page, text: str, x: float, baseline: float, width_limit: float,
+               base_font: fitz.Font, font_size: float, italic_phrases: list[str],
+               italic_font: fitz.Font | None, justify_to: float | None = None) -> bool:
+    tokens = styled_tokens(text, italic_phrases)
+    if any(italic for token, italic in tokens) and italic_font is None:
+        raise ValueError("Source-verified italics require a matching local italic font")
+    widths = [
+        (italic_font if italic else base_font).text_length(token, fontsize=font_size)
+        for token,italic in tokens
+    ]
+    natural = sum(widths)
+    if natural > width_limit + 1.5:
+        return False
+    gaps = [i for i,(token,_) in enumerate(tokens) if token.isspace()]
+    extra = 0.0
+    if justify_to is not None and gaps:
+        proposed = (justify_to - x - natural) / len(gaps)
+        # Do not apply grotesque spacing to short/abnormal lines.
+        if 0 <= proposed <= font_size*.5:
+            extra = proposed
+    cursor = x
+    for (token,italic), advance in zip(tokens,widths):
+        if token.isspace():
+            cursor += advance + extra
+            continue
+        page.insert_text((cursor,baseline),token,
+                         fontname="BookItalic" if italic else "BookBody",
+                         fontsize=font_size,color=(.17,.19,.18), overlay=True)
+        cursor += advance
+    return True
+
+
+def digital_footer(page: fitz.Page, src: fitz.Page, items: list[dict],
+                   base_font: fitz.Font, size: float) -> bool:
+    """Preserve original footer graphic; replace only verified OCR page-number ink.
+
+    The local background paint is conservative and needs visual QA on textured
+    scanned paper. If sampling is unsafe, keep the original scanned footer.
+    """
+    if len(items) != 1:
+        return False
+    line = items[0]
+    width,height = src.rect.width,src.rect.height
+    x,y = float(line["x"])*width,float(line["y"])*height
+    w,h = float(line["width"])*width,float(line["height"])*height
+    if not (6 <= h <= 22 and 3 <= w <= 43 and y >= height*.875):
+        return False
+    sample_rect = fitz.Rect(max(0,x-7),max(0,y-1),min(width,x+w+8),min(height,y+h+2))
+    pix = src.get_pixmap(matrix=fitz.Matrix(1,1),clip=sample_rect,colorspace=fitz.csRGB,alpha=False)
+    if pix.width < 5 or pix.height < 5:
+        return False
+    im = Image.frombytes("RGB",(pix.width,pix.height),pix.samples)
+    # Background from side strips away from the glyph (not the dark text).
+    colors = [im.getpixel((k,j)) for j in range(pix.height)
+              for k in list(range(min(3,pix.width)))+list(range(max(0,pix.width-3),pix.width))]
+    if not colors:
+        return False
+    bg = tuple(int(statistics.median(p[c] for p in colors)) for c in range(3))
+    if any(max(p[c] for p in colors)-min(p[c] for p in colors) > 90 for c in range(3)):
+        return False
+    box = fitz.Rect(max(0,x-1),max(0,y-1),min(width,x+w+1),min(height,y+h+1))
+    page.draw_rect(box,color=None,fill=tuple(c/255 for c in bg),overlay=True)
+    foot_size = max(7,min(13,h*.87))
+    if base_font.text_length(line["text"],fontsize=foot_size) > w + 6:
+        return False
+    page.insert_text((x,y+foot_size*.93),line["text"],fontname="BookBody",
+                     fontsize=foot_size,color=(.45,.45,.45),overlay=True)
+    return True
+
+
 def typeset_page(out: fitz.Document, original: fitz.Document, idx: int, lines: list[dict],
-                 fontfile: Path, font: fitz.Font, size: float, keep_footer: bool) -> tuple[bool, str]:
+                 fontfile: Path, font: fitz.Font, size: float, keep_footer: bool,
+                 italic_phrases: list[str] | None = None) -> tuple[bool, str]:
     src = original[idx]
-    page = out.new_page(width=src.rect.width, height=src.rect.height)
-    font_name = "BookBody"
-    page.insert_font(fontname=font_name, fontfile=str(fontfile))
-    previous_y = -100.0
-    for line in lines:
-        text = line["text"]
-        x = src.rect.width * line["x"]
-        top = src.rect.height * line["y"]
-        bottom = src.rect.height * (line["y"] + line["height"])
-        baseline = top + size * .89
-        if (x < 4 or baseline > src.rect.height - 16 or top < -1
-                or baseline - previous_y < size * .88):
-            return False, "line bounds or overlap"
-        actual = font.text_length(text, fontsize=size)
-        maxwidth = src.rect.width - max(24, src.rect.width * .055) - x
-        if actual > maxwidth + 1.5:
-            return False, "line would overflow at locked font size"
-        # This is a first-pass, source-anchored typesetting. It intentionally does
-        # not hallucinate italics/paragraph boundaries from OCR geometry alone.
-        page.insert_text((x, baseline), text, fontname=font_name, fontsize=size,
-                         color=(.17, .19, .18), overlay=True)
-        previous_y = baseline
-    if keep_footer and src.rect.height > 100:
-        clip = fitz.Rect(0, src.rect.height - 36, src.rect.width, src.rect.height)
-        page.show_pdf_page(clip, original, idx, clip=clip, overlay=False,
-                           keep_proportion=False)
+    page = out.new_page(width=src.rect.width,height=src.rect.height)
+    page.insert_font(fontname="BookBody",fontfile=str(fontfile))
+    italic_phrases = italic_phrases or []
+    italic_file = italic_font_file(fontfile)
+    if italic_phrases and italic_file is None:
+        return False, "matching italic font unavailable; source styles need review"
+    italic_font = fitz.Font(fontfile=str(italic_file)) if italic_file else None
+    if italic_font is not None and italic_phrases:
+        page.insert_font(fontname="BookItalic",fontfile=str(italic_file))
+    body,footer = split_footer(lines)
+    if len(body) < 7:
+        return False, "insufficient body OCR for true digital typesetting"
+    try:
+        positions=plan_body(body,src.rect.width,src.rect.height,size)
+    except ValueError as exc:
+        return False,str(exc)
+    if keep_footer and src.rect.height>100:
+        strip = fitz.Rect(0,src.rect.height-36,src.rect.width,src.rect.height)
+        page.show_pdf_page(strip,original,idx,clip=strip,overlay=False,keep_proportion=False)
+    # Estimate the right body text edge from source long lines. Do not change
+    # mirrored left/right margins or force justification on short closing lines.
+    sorted_edges = sorted([float(line["x"]+line["width"])*src.rect.width for line in body
+                           if len(line["text"])>=25])
+    right_edge = (sorted_edges[max(0,int(len(sorted_edges)*.75)-1)]
+                  if sorted_edges else src.rect.width*.90)
+    for record in positions:
+        text = record["text"]
+        x,baseline = record["draw_x"],record["baseline"]
+        maxwidth=src.rect.width-max(24,src.rect.width*.055)-x
+        target = (right_edge if not record["paragraph_last"] and
+                  record["paragraph_line_count"]>1 and len(text.split())>=5 else None)
+        try:
+            ok=paint_line(page,text,x,baseline,maxwidth,font,size,
+                          italic_phrases,italic_font,justify_to=target)
+        except ValueError as exc:
+            return False,str(exc)
+        if not ok:
+            return False,"source line would overflow at approved font size"
+    if keep_footer and footer:
+        # Digitalize an unambiguous source page number, without erasing its
+        # decorative frame or moving it to another page.
+        digital_footer(page,src,footer,font,size)
+    elif footer:
+        return False,"source footer digit not preserved"
     generated = word_counts(page.get_text("text"))
-    expected = word_counts(" ".join(ln["text"] for ln in lines))
-    if expected - generated:
-        return False, "OCR text lost in generated text layer"
-    visible = sum(len(x.get("chars", [])) for x in page.get_texttrace() if x.get("type") != 3)
-    if visible < 65:
-        return False, "insufficient visible vector text"
-    return True, ""
+    expected = word_counts(" ".join(line["text"] for line in body))
+    # Footer may remain visually intact as source strip but not extracted; do
+    # not falsely claim it is digital unless visible OCR was inserted above.
+    if expected-generated:
+        return False,"source OCR words lost in typeset output"
+    visible=sum(len(x.get("chars",[])) for x in page.get_texttrace()
+                if x.get("type")!=3)
+    if visible<65:
+        return False,"insufficient visible vector text"
+    return True,""
 
 
 def fallback_page(out: fitz.Document, original: fitz.Document, idx: int, lines: list[dict]) -> None:
@@ -246,6 +353,11 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         style = json.loads(style_file.read_text(encoding="utf-8"))
         if style.get("body_font_size_pt") != font_size or style.get("font_file_sha256") != sha256(fontfile):
             raise ValueError("Body font or font size changed after pilot approval")
+    annotations = {}
+    if style_annotations and style_annotations.is_file():
+        annotations = json.loads(style_annotations.read_text(encoding="utf-8"))
+        if annotations.get("source_sha256") != source_sha:
+            raise ValueError("Style annotations do not match the source PDF hash")
     doc = fitz.open(source)
     if mode == "full" and page_list != list(range(1, len(doc)+1)):
         raise ValueError("Cannot publish incomplete full-book page mapping")
@@ -278,7 +390,10 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         if ink_score > 1:
             reasons.append("graphic, decoration, or unrecognized text risk")
         if not reasons:
-            ok, reason = typeset_page(output, doc, number - 1, lines, fontfile, font, size, keep_footer)
+            ok, reason = typeset_page(
+                output, doc, number - 1, lines, fontfile, font, size, keep_footer,
+                italic_phrases=verified_italics(annotations, number)
+            )
             if ok:
                 mode_name = "born_digital_unverified"
             else:
@@ -299,7 +414,8 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
                      "mode": mode_name, "ocr_issues": len(issues),
                      "ocr_review_required": bool(issues or review_reasons), "ocr_secondary_status": review_status,
                      "detected_nontext_ink_score": round(ink_score, 3),
-                     "reasons": reasons})
+                     "reasons": reasons,
+                     "source_verified_italic_spans": len(verified_italics(annotations, number))})
     dest.parent.mkdir(parents=True, exist_ok=True)
     output.save(temp, garbage=3, deflate=True)
     output.close()
@@ -324,7 +440,9 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
               "font_family": family, "font_file_name": fontfile.name,
               "body_font_size_pt": size, "digital_pages": counts["born_digital_unverified"],
               "fallback_pages": counts["searchable_scan_fallback"],
-              "per_page": rows}
+              "per_page": rows,
+              "typography_layout_version": 2,
+              "style_annotations_sha256": sha256(style_annotations) if style_annotations and style_annotations.exists() else None}
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
     doc.close()
     return report
