@@ -54,6 +54,10 @@ class DiversePilotTests(unittest.TestCase):
             self.assertTrue({3,21}.issubset(set(selected["pages"])))
             self.assertIn("table_candidate", selected["roles"].values())
             self.assertIn("illustration_candidate", selected["roles"].values())
+            # Table is immediately next to a smoke page: difference in layout
+            # must win over source-page spacing.
+            adjacent=select_diverse(src,count=7,keep_pages=[5,18])
+            self.assertIn(6,adjacent["pages"])
             self.assertTrue(selected["human_visual_verification_required"])
             overview=Path(directory)/"contact.pdf"
             contact_sheet(src,selected,overview)
