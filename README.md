@@ -1,88 +1,56 @@
 # Scan Book to Digital PDF
 
-Ubah **PDF buku hasil scan** menjadi buku digital yang lebih nyaman dibaca. Teks bisa dicari dan disalin; foto, tabel, dan gambar tetap diperhatikan.
+Ubah PDF hasil scan menjadi **buku digital yang teksnya bisa dipilih, disalin, dan dicari**. Buku sumber tidak diubah.
 
-## Cara pakai di ChatGPT Work
+## Untuk pengguna ChatGPT Work (tanpa pengetahuan teknis)
 
-**1.** Lampirkan PDF buku Anda.
+**Cukup unggah PDF dan kirim link repo ini:**
+https://github.com/MuhtajinMukhtar/scan-book-to-digital-pdf
 
-**2.** Salin kalimat ini:
+AI akan mengikuti `SKILL.md`, membuat **pilot dua halaman** terlebih dahulu, lalu meminta persetujuan sebelum memproses seluruh buku. Jika ada komponen yang perlu dipasang di Mac, AI meminta izin dalam bahasa sederhana. Pengguna tidak harus memilih mesin OCR atau mengetik perintah.
 
-> **Tolong ubah PDF buku ini menjadi buku digital yang nyaman dibaca. Ikuti panduan https://github.com/MuhtajinMukhtar/scan-book-to-digital-pdf dan bimbing saya dengan pilihan sederhana.**
+**Jangan menyetujui pilot yang hanya menampilkan scan asli dengan teks tersembunyi.** Harus ada contoh dengan teks digital yang benar-benar terlihat dan tata letak yang diperiksa.
 
-**3.** AI membuat dua contoh halaman teks terlebih dahulu, dan menambah contoh lain bila diperlukan untuk memperlihatkan gambar, judul bab, atau tabel. Tidak perlu mengatur perangkat lunak sendiri. dengan berbagai bentuk halaman dalam buku, dengan jenis, ukuran, dan gaya tulisan semirip mungkin dengan sumber. Anda boleh menjawab **"ikuti aslinya saja"** untuk pengaturan huruf.
+## Perubahan penting: hemat sumber daya
 
-**4.** Pastikan contoh sebelah kanan **benar-benar dibuat ulang menggunakan teks digital**, bukan foto scan yang sama dengan lapisan pencarian. Lihat PDF contoh dan jawab **"Cocok, lanjutkan"** atau **"Perbaiki bagian ini"**. **AI baru mengerjakan seluruh halaman setelah contoh disetujui.**
+Pengujian pada Mac menunjukkan **PP-StructureV3 (PaddleOCR) menghabiskan memori besar dan mengalami segmentation fault**. Karena itu versi terbaru tidak lagi menjalankan PP-StructureV3 secara otomatis.
 
-Anda tidak perlu memahami istilah OCR, PaddleOCR, program, atau terminal.
+**Alur aman sekarang: Apple Vision + Tesseract** pada Mac. Tesseract adalah pembanding OCR yang lebih sederhana; **kualitasnya belum terbukti setara dengan hasil Apple Vision + PaddleOCR sebelumnya**. Halaman dengan perbedaan teks atau tata letak sulit tetap perlu diperiksa terhadap gambar scan.
 
-## Hemat kuota: program lokal sebagai pelaksana utama
+Pekerjaan utama dijalankan skrip lokal, **tidak perlu model High** untuk setiap halaman. Jika mesin OCR yang aman tidak tersedia, AI harus berhenti tanpa mengulang metode yang sudah crash atau memindahkan pekerjaan ke Ubuntu yang lebih sempit memorinya.
 
-**Tidak wajib memakai model High.** Model ringan cukup untuk membaca Skill, menjalankan satu perintah, menampilkan PDF pilot dan menyampaikan hasil QA. Program lokal mengolah sebagian besar halaman tanpa mengirim tiap teks halaman ke AI.
+## Untuk AI Agent / pengguna teknis
 
-Agen pada Mac yang diizinkan menjalankan:
-
-```sh
-python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work
-```
-
-Program memilih dua contoh halaman teks dari pratinjau resolusi rendah, kemudian memakai **Apple Vision + PaddleOCR PP-StructureV3 hanya untuk dua halaman tersebut**. Halaman contoh digital dan perbandingan tersedia di `work/pilot/`. Jika perlu memperbaiki jenis huruf atau margin, **gunakan cache OCR**, jangan mengulang pengenalan teks:
+Baca [SKILL.md](SKILL.md) dan [setup Mac](references/mac-setup.md). Perintah dasar:
 
 ```sh
-python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work --skip-ocr
+python scripts/run_book.py pilot --source "/path/to/scan-buku.pdf" --work-dir ./work
 ```
 
-Agen harus memeriksa hasil nyata terlebih dahulu; bila dua contoh belum mewakili variasi layout, pilih beberapa halaman lain secara bertahap. Setelah pengguna menyetujui contoh yang benar-benar ditata ulang, agen mencatat persetujuan dan baru menjalankan seluruh buku:
+Output pilot: `work/pilot/Book_Pilot_REVIEW.pdf` dan `work/pilot/Book_Pilot_Comparison.pdf`. OCR akan disimpan pada `work/ocr/` (Apple Vision), `work/tesseract/`, dan `work/fusion_safe/` (perbandingan). Untuk menyusun ulang PDF contoh tanpa OCR ulang:
 
 ```sh
-python scripts/run_book.py approve --source "/path/to/book.pdf" --work-dir ./work --confirm APPROVE_PILOT
-python scripts/run_book.py full --source "/path/to/book.pdf" --work-dir ./work
+python scripts/run_book.py pilot --source "/path/to/scan-buku.pdf" --work-dir ./work --skip-ocr
 ```
 
-**Batas kemampuan versi awal:** penyusun otomatis menata teks biasa dalam ukuran dan keluarga font yang dikunci. Halaman dengan tabel, foto, perbedaan OCR yang belum dipastikan atau layout yang tidak aman akan dipertahankan sebagai *scan asli yang dapat dicari*, **bukan dibuang atau dipalsukan sebagai halaman digital**. Beberapa detail seperti italic di tengah kalimat dan desain bab masih memerlukan penanganan editorial. Semua output tetap berstatus **REVIEW**. Ini belum terbukti dapat menggantikan kualitas pilot manual sepenuhnya pada buku apa pun.
-
-**Batas lingkungan:** Apple Vision harus dijalankan di Mac yang benar-benar tersedia/diizinkan. Jika Work atau Codex menjalankan Linux terpisah tanpa akses Mac, jangan mengaku telah memakai Apple Vision. Pelaporan error lebih baik daripada mengarang hasil.
-
-## Bagaimana AI memproses buku?
-
-Di Mac, alur yang disarankan memakai **Apple Vision + PaddleOCR PP-StructureV3**. Keduanya membaca halaman yang sama, kemudian AI membandingkan hasilnya dengan gambar asli dan memeriksa bagian yang hilang atau salah. Hasil perbandingan tidak otomatis dianggap benar: nama orang, kata sulit, tabel dan halaman bergambar tetap harus diperiksa. PDF asli tidak boleh ditimpa.
-
-**Aturan wajib:** jika sumber punya 197 halaman, hasil juga harus **197 halaman**. Isi dari halaman 27 harus tetap di halaman 27, tidak boleh hilang atau meluber ke halaman 28. AI memeriksa pasangan halaman satu per satu; bila ada halaman yang tidak muat dalam format yang disetujui, halaman itu dipertahankan sebagai scan asli yang tetap bisa dicari/disalin, ditandai untuk review, **bukan** memindahkan isi ke halaman berikutnya. Pemeriksaan otomatis tetap memerlukan pengecekan visual karena OCR bisa salah. Lihat [aturan kesetiaan setiap halaman](references/page-fidelity.md).
-
-**Penting:** Menambahkan lapisan teks tersembunyi pada scan asli **bukan** membuat buku digital yang ditata ulang. Perbandingan yang menampilkan dua gambar halaman sama bukan pilot yang boleh disetujui. Agen harus menghasilkan contoh halaman dengan teks digital yang benar-benar terlihat, font dan ukuran nyata, serta perbedaan struktur PDF yang dapat diperiksa. Skrip `scripts/pilot_typeset_gate.py` akan menolak pilot berbasis scan yang dominan atau tidak memiliki contoh cukup yang sudah ditata ulang.
-
-**Tahap wajib:** pilih beberapa halaman dari bagian berbeda, bangun aturan huruf/ukuran/spasi/indentasi yang konsisten, buat PDF contoh, minta persetujuan, lalu gunakan aturan yang sudah disepakati untuk seluruh buku. Hasilnya tetap diperiksa halaman demi halaman. Panduan detail: [pilot dan konsistensi gaya](references/pilot-and-style-lock.md).
-
-**Penghematan:** agen diminta menyimpan hasil pembacaan agar tidak mengulang pekerjaan berat, mengerjakan halaman bertahap, serta berhenti sebelum proses lanjutan bila komputer menjadi sangat panas/lambat atau kuota Work hampir habis. Petunjuk teknisnya ada di [resource budget](references/resource-budget.md).
-
-Program dalam repo menyiapkan OCR gabungan dan laporan pemeriksaan; **menata ulang setiap jenis halaman buku masih membutuhkan kerja editorial oleh AI**. Jadi kualitas setara sebuah hasil buku yang pernah dikerjakan tetap harus diuji pada buku baru, bukan dijanjikan tanpa pemeriksaan.
-
-## Untuk AI agent / pengguna teknis
-
-Mulai dari [`SKILL.md`](SKILL.md). Setup yang aman untuk Mac ada di [`references/mac-setup.md`](references/mac-setup.md). Jalankan OCR gabungan **hanya untuk halaman percontohan terlebih dahulu** sesudah instalasi di lingkungan terpisah (halaman berikut hanya contoh; AI memilih sendiri yang paling mewakili isi buku):
+**Hanya setelah user menyetujui PDF pilot yang nyata:**
 
 ```sh
-python scripts/mac_hybrid_ocr.py /path/to/book.pdf --work-dir ./work --start-page 1 --end-page 5
+python scripts/run_book.py approve --source "/path/to/scan-buku.pdf" --work-dir ./work --confirm APPROVE_PILOT
+python scripts/run_book.py full --source "/path/to/scan-buku.pdf" --work-dir ./work
 ```
 
-Hasil utama ada di `work/ocr/` (Apple Vision), `work/paddle/` (hasil mentah dan Markdown PaddleOCR), dan `work/fusion/OCR_REVIEW.json` (bagian yang perlu diverifikasi). Proses dapat dilanjutkan per halaman; tidak perlu mengulang cache yang sudah valid.
+Versi sekarang adalah **mesin otomatis tahap awal**. Teks normal dapat ditata ulang dengan font konsisten; halaman bergambar, tabel, tipografi rumit, atau OCR yang tidak pasti mungkin tetap memakai scan asli dengan lapisan teks untuk dicari, diberi label `searchable_scan_fallback`. Mesin belum otomatis meniru semua cetak miring, indentasi dan elemen dekoratif seperti contoh hasil editorial manual sebelumnya.
 
-Untuk memeriksa hasil yang ada tanpa menjalankan ulang OCR:
-
-```sh
-python scripts/mac_hybrid_ocr.py --work-dir ./work --compare-only
-```
-
-**Jangan menjalankan seluruh buku sebelum pengguna menyetujui contoh PDF.** Sesudah persetujuan, agen melanjutkan OCR dan rekontruksi seluruh halaman dengan gaya tulisan yang dikunci dari pilot. Setelah agen merekonstruksi dan menghasilkan PDF digital, **wajib** gunakan `scripts/page_fidelity_audit.py` untuk membandingkan **setiap halaman sumber dengan halaman hasil bernomor sama**, berdasarkan teks referensi yang sudah dicek terhadap Apple Vision, PaddleOCR, dan scan asli, lalu `scripts/pdf_audit.py`, pemeriksaan visual terhadap scan, serta manifest per halaman. File PDF hasil tetap berstatus **REVIEW** sampai disetujui.
-
-**Tanggung jawab:** Pastikan Anda berhak memproses buku. Jangan mengunggah salinan buku berhak cipta, dokumen pribadi, cache OCR buku, atau berkas font berlisensi ke repo publik. Repo ini menyediakan kode dan panduan, bukan berkas buku.
+**Aturan mutu:** jumlah halaman harus identik; halaman sumber N harus tetap menjadi halaman hasil N tanpa isi hilang atau meluber. Laporan mesin bukan bukti mutlak: verifikasi tiap halaman, periksa sumber, dan terapkan [audit page fidelity](references/page-fidelity.md).
 
 ## Pengujian
 
 ```sh
+pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-Uji otomatis memakai data sintetis untuk logika penggabungan OCR. **Pengujian OCR aktual pada Mac M1/PP-StructureV3 serta kualitas PDF buku lain masih perlu dilakukan.**
+Tes otomatis memakai data sintetis, bukan uji nyata Apple Silicon. Sampai uji Mac berhasil, jangan menjanjikan pemrosesan 220 halaman otomatis atau penghematan kuota yang terukur.
 
-Lisensi kode: [MIT](LICENSE).
+**Privasi dan hak cipta:** jangan unggah scan buku, cache OCR, foto pribadi, atau font berlisensi ke repository publik. Lisensi kode: [MIT](LICENSE).
