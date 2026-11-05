@@ -95,6 +95,17 @@ class StrictDigitalPolicyTests(unittest.TestCase):
         self.assertEqual(result["status"],"INCOMPLETE_DIGITAL_PAGES")
         self.assertIn("near_full_page_raster_requires_reconstruction", {x["type"] for x in result["issues"]})
 
+    def test_cropped_source_footer_is_permitted_on_genuine_digital_page(self):
+        self.compose(["verified_cover_raster_exempt","born_digital_unverified","born_digital_unverified"])
+        with fitz.open(self.out) as result, fitz.open(self.src) as original:
+            bottom=fitz.Rect(0,575,420,620)
+            result[1].show_pdf_page(bottom,original,1,clip=bottom,
+                                    keep_proportion=False,overlay=False)
+            result.saveIncr()
+        result=gate.assess(self.src,self.out,self.qa,self.cover)
+        self.assertEqual(result["status"],"READY_FOR_EDITORIAL_FIDELITY_REVIEW")
+        self.assertLess(result["per_page"][1]["largest_raster_page_ratio"],.2)
+
     def test_cannot_exempt_middle_page_or_skip_scan_verification(self):
         self.compose(["verified_cover_raster_exempt","born_digital_unverified","born_digital_unverified"])
         bad={"source_sha256":self.source_sha,
