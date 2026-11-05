@@ -66,7 +66,8 @@ def pilot(args: argparse.Namespace) -> int:
     if not args.skip_ocr:
         ocr_summary = run_ocr(args.source, args.work_dir, pages, args.dpi,
                               args.cpu_threads, args.enable_mobile,
-                              args.allow_model_download, args.max_mobile_pages)
+                              args.allow_model_download, args.max_mobile_pages,
+                              skip_vision=args.reuse_apple)
     local_font = font_path(args.font_family, args.font_file)
     pilot_dir = args.work_dir / "pilot"
     out = pilot_dir / "Book_Pilot_REVIEW.pdf"
@@ -92,7 +93,7 @@ def pilot(args: argparse.Namespace) -> int:
         previous = args.work_dir / "review" / "SUMMARY.json"
         if previous.exists():
             ocr_summary = json.loads(previous.read_text(encoding="utf-8"))
-    pending = (ocr_summary or {}).get("secondary_pending_pages", [])
+    pending = sorted(set((ocr_summary or {}).get("secondary_pending_pages", [])) & set(pages))
     summary = {
         "status": ("PILOT_INCOMPLETE" if needs_more else
                    "PILOT_NEEDS_OCR_REVIEW" if pending else
@@ -161,7 +162,8 @@ def full(args: argparse.Namespace) -> int:
     if not args.skip_ocr:
         ocr_summary = run_ocr(args.source, args.work_dir, pages, args.dpi,
                               args.cpu_threads, args.enable_mobile,
-                              args.allow_model_download, args.max_mobile_pages)
+                              args.allow_model_download, args.max_mobile_pages,
+                              skip_vision=args.reuse_apple)
     out = args.output or (args.work_dir / "output" / "Book_Full_REVIEW.pdf")
     result = build(args.source, args.work_dir, out, "full", pages,
                    style["font_family"], local_font, style["body_font_size_pt"],
@@ -186,7 +188,10 @@ def main() -> int:
         p.add_argument("--source", type=Path, required=True)
         p.add_argument("--work-dir", type=Path, required=True)
         if name in ("pilot", "full"):
-            p.add_argument("--skip-ocr", action="store_true", help="Reuse already verified OCR/fusion caches (works off-Mac)")
+            p.add_argument("--skip-ocr", action="store_true",
+                           help="Rerender layout using existing OCR caches; no OCR invoked")
+            p.add_argument("--reuse-apple", action="store_true",
+                           help="Reuse Apple Vision cache; evaluate optional Mobile on uncertain pages")
             p.add_argument("--dpi", type=int, default=180)
             p.add_argument("--cpu-threads", type=int, default=2,
                            help="Bound local OCR thread count")
@@ -209,6 +214,8 @@ def main() -> int:
     args = parser.parse_args()
     if not args.source.is_file():
         parser.error("Source PDF not found")
+    if hasattr(args, "reuse_apple") and args.reuse_apple and args.skip_ocr:
+        parser.error("--reuse-apple and --skip-ocr are mutually exclusive")
     if hasattr(args, "max_mobile_pages") and not 0 <= args.max_mobile_pages <= 5:
         parser.error("--max-mobile-pages must be 0..5")
     if hasattr(args, "allow_model_download") and args.allow_model_download and not args.enable_mobile:
