@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from io import BytesIO
 import importlib.util
+import sys
 import json
 from pathlib import Path
 import tempfile
@@ -12,6 +13,7 @@ import fitz
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location("local_book_engine", ROOT / "scripts" / "local_book_engine.py")
 engine = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(engine)
