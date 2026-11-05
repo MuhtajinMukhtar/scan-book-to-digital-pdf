@@ -120,7 +120,8 @@ def main():
     if engine=="auto":
         engine="apple-vision" if platform.system()=="Darwin" and shutil.which("swiftc") else "tesseract"
     locales=[z.strip() for z in args.languages.split(",") if z.strip()]
-    binary=prep_vision_binary(args.out_dir) if engine=="apple-vision" else None
+    # Compile the Swift helper only if an uncached page actually needs Apple Vision.
+    binary=None
     source_sha=filehash(args.source)
     with fitz.open(args.source) as document:
         end=args.end_page or len(document)
@@ -150,6 +151,8 @@ def main():
             im=Image.frombytes("RGB",(pix.width,pix.height),pix.samples)
             im.save(img,"JPEG",quality=92,optimize=True)
             if engine=="apple-vision":
+                if binary is None:
+                    binary=prep_vision_binary(args.out_dir)
                 lines=apple_vision(img,binary,locales)
             else:
                 # Map Apple locale language names to installed Tesseract codes,
