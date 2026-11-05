@@ -20,6 +20,8 @@ Anda tidak perlu memahami istilah OCR, PaddleOCR, program, atau terminal.
 
 Di Mac, alur yang disarankan memakai **Apple Vision + PaddleOCR PP-StructureV3**. Keduanya membaca halaman yang sama, kemudian AI membandingkan hasilnya dengan gambar asli dan memeriksa bagian yang hilang atau salah. Hasil perbandingan tidak otomatis dianggap benar: nama orang, kata sulit, tabel dan halaman bergambar tetap harus diperiksa. PDF asli tidak boleh ditimpa.
 
+**Aturan wajib:** jika sumber punya 197 halaman, hasil juga harus **197 halaman**. Isi dari halaman 27 harus tetap di halaman 27, tidak boleh hilang atau meluber ke halaman 28. AI memeriksa pasangan halaman satu per satu; bila ada halaman yang tidak muat dalam format yang disetujui, halaman itu dipertahankan sebagai scan asli yang tetap bisa dicari/disalin, ditandai untuk review, **bukan** memindahkan isi ke halaman berikutnya. Pemeriksaan otomatis tetap memerlukan pengecekan visual karena OCR bisa salah. Lihat [aturan kesetiaan setiap halaman](references/page-fidelity.md).
+
 **Tahap wajib:** pilih beberapa halaman dari bagian berbeda, bangun aturan huruf/ukuran/spasi/indentasi yang konsisten, buat PDF contoh, minta persetujuan, lalu gunakan aturan yang sudah disepakati untuk seluruh buku. Hasilnya tetap diperiksa halaman demi halaman. Panduan detail: [pilot dan konsistensi gaya](references/pilot-and-style-lock.md).
 
 Program dalam repo menyiapkan OCR gabungan dan laporan pemeriksaan; **menata ulang setiap jenis halaman buku masih membutuhkan kerja editorial oleh AI**. Jadi kualitas setara sebuah hasil buku yang pernah dikerjakan tetap harus diuji pada buku baru, bukan dijanjikan tanpa pemeriksaan.
@@ -40,7 +42,7 @@ Untuk memeriksa hasil yang ada tanpa menjalankan ulang OCR:
 python scripts/mac_hybrid_ocr.py --work-dir ./work --compare-only
 ```
 
-**Jangan menjalankan seluruh buku sebelum pengguna menyetujui contoh PDF.** Sesudah persetujuan, agen melanjutkan OCR dan rekontruksi seluruh halaman dengan gaya tulisan yang dikunci dari pilot. Setelah agen merekonstruksi dan menghasilkan PDF digital, gunakan `scripts/pdf_audit.py`, pemeriksaan visual terhadap scan, serta manifest per halaman. File PDF hasil tetap berstatus **REVIEW** sampai disetujui.
+**Jangan menjalankan seluruh buku sebelum pengguna menyetujui contoh PDF.** Sesudah persetujuan, agen melanjutkan OCR dan rekontruksi seluruh halaman dengan gaya tulisan yang dikunci dari pilot. Setelah agen merekonstruksi dan menghasilkan PDF digital, **wajib** gunakan `scripts/page_fidelity_audit.py` untuk membandingkan **setiap halaman sumber dengan halaman hasil bernomor sama**, lalu `scripts/pdf_audit.py`, pemeriksaan visual terhadap scan, serta manifest per halaman. File PDF hasil tetap berstatus **REVIEW** sampai disetujui.
 
 **Tanggung jawab:** Pastikan Anda berhak memproses buku. Jangan mengunggah salinan buku berhak cipta, dokumen pribadi, cache OCR buku, atau berkas font berlisensi ke repo publik. Repo ini menyediakan kode dan panduan, bukan berkas buku.
 
