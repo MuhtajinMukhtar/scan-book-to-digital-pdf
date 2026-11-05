@@ -130,9 +130,16 @@ def role_scores(m: dict, number: int, total: int) -> dict:
     text_score = groups - heavy*1.2 - hlines*2-vlines*2
     # A real lined table should contain both horizontal and vertical rules.
     # A large colored box without cells is mixed-format, not necessarily a table.
+    # Photos/large colored quotation panels can resemble table rules at
+    # thumbnail resolution. Thin grids with substantial white cell interiors
+    # are stronger evidence than a dense uniform rectangle.
     table_score = (10*min(5,hlines)+12*min(5,vlines)
-                   - .8*heavy - (35 if not hlines or not vlines else 0))
-    illustration_score = 2.0*heavy + ink*50 - hlines*2-vlines*2
+                   - .8*heavy - (35 if not hlines or not vlines else 0)
+                   - max(0,ink-.28)*230
+                   - max(0,heavy-19)*3.8)
+    illustration_score = (2.0*heavy + ink*50 - hlines*2-vlines*2
+                          - max(0,ink-.33)*250
+                          - max(0,heavy-34)*3)
     chapter_score = top*65 + max(0,30-groups)*1.1 + min(6,heavy)*.5
     mixed_score = 17 - abs(groups-20)*.55 + heavy*.85 + hlines*.7
     sparse_score = 40-max(0,groups-12)*1.2+top*12+min(6,heavy)*.4
@@ -170,8 +177,11 @@ def select_diverse(source: Path, count: int = 7, keep_pages: list[int] | None = 
         # Always survey cached smoke pages even when uniform sampling skips them.
         to_survey=sorted(set(survey_numbers(total)) | set(keep))
         if total>30:
-            # Exclude covers/back covers from normal chapter/table samples.
-            to_survey=[n for n in to_survey if 3 <= n <= total-2 or n in keep]
+            # Front matter/contents and back-cover panels are poor examples of
+            # recurring body/chapter layouts; keep explicit smoke selections.
+            front_limit=max(3,round(total*.04))
+            back_limit=total-max(2,round(total*.015))
+            to_survey=[n for n in to_survey if front_limit <= n <= back_limit or n in keep]
         for n in to_survey:
             try:
                 features=page_features(doc[n-1])
