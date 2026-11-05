@@ -56,6 +56,49 @@ def allowed_cover_pages(source: Path, evidence_path: Path | None) -> list[int]:
     return sorted(seen)
 
 
+def largest_effective_raster_ratio(page: fitz.Page) -> float:
+    """Account for *visible clipping* of images nested in PDF Form XObjects.
+
+    PyMuPDF get_image_info() alone reports full 100% image bboxes even when a
+    page's source scan is *only painted in a 36-pt footer crop*. Follow the
+    image's referencing Form parents and intersect their effective bboxes.
+    """
+    forms = {xref: {"parent": parent, "bbox": fitz.Rect(bbox)}
+             for xref, _name, parent, bbox in page.get_xobjects()}
+    parents_by_image = {}
+    for row in page.get_images(full=True):
+        if len(row) >= 10:
+            parents_by_image.setdefault(row[0], set()).add(row[-1])
+    ratios=[]
+    for info in page.get_image_info(xrefs=True):
+        bbox=info.get("bbox")
+        if not bbox:
+            continue
+        image_box=fitz.Rect(bbox) & page.rect
+        if image_box.is_empty:
+            continue
+        xref=info.get("xref",0)
+        parents=parents_by_image.get(xref,{0})
+        for direct_parent in parents:
+            clipped=fitz.Rect(image_box)
+            current=direct_parent
+            visited=set()
+            while current:
+                if current in visited or current not in forms:
+                    # Unknown/damaged form graph: treat it conservatively.
+                    clipped=image_box
+                    break
+                visited.add(current)
+                form=forms[current]
+                clipped &= form["bbox"]
+                if clipped.is_empty:
+                    break
+                current=form["parent"]
+            if not clipped.is_empty:
+                ratios.append(clipped.get_area()/max(.01,page.rect.get_area()))
+    return round(max(ratios,default=0.0),3)
+
+
 def assess(source: Path, output: Path, qa_file: Path,
            cover_evidence: Path | None = None) -> dict:
     issues = []
@@ -99,14 +142,7 @@ def assess(source: Path, output: Path, qa_file: Path,
             trace=page.get_texttrace()
             visible_chars=sum(len(item.get("chars",[])) for item in trace
                               if item.get("type") != 3 and float(item.get("opacity",1))>.5)
-            areas=[]
-            for info in page.get_image_info():
-                bbox=info.get("bbox")
-                if bbox:
-                    box=fitz.Rect(bbox) & page.rect
-                    if not box.is_empty:
-                        areas.append(box.get_area()/max(.01,page.rect.get_area()))
-            max_raster=round(max(areas,default=0),3)
+            max_raster=largest_effective_raster_ratio(page)
             exempt=number in covers
             problems=[]
             if not exempt:
