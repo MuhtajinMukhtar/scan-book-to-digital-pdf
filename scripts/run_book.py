@@ -71,9 +71,11 @@ def pilot(args: argparse.Namespace) -> int:
     local_font = font_path(args.font_family, args.font_file)
     pilot_dir = args.work_dir / "pilot"
     out = pilot_dir / "Book_Pilot_REVIEW.pdf"
+    source_styles = args.work_dir / "style-annotations.json"
     report = build(args.source, args.work_dir, out, "pilot", pages,
                    args.font_family, local_font, args.font_size,
-                   strict_hybrid=False, fusion_subdir="fusion_mobile")
+                   strict_hybrid=False, fusion_subdir="fusion_mobile",
+                   style_annotations=source_styles)
     comparison(args.source, out, pages, pilot_dir / "Book_Pilot_Comparison.pdf")
     style = {
         "source_sha256": report["source_sha256"],
@@ -83,6 +85,7 @@ def pilot(args: argparse.Namespace) -> int:
         "font_file": str(local_font.resolve()),
         "font_file_sha256": sha256(local_font),
         "body_font_size_pt": report["body_font_size_pt"],
+        "style_annotations_sha256": (sha256(source_styles) if source_styles.is_file() else None),
         "engine_version": 3,
         "ocr_backend": "apple-vision-primary+paddle-mobile-selective",
     }
@@ -105,7 +108,9 @@ def pilot(args: argparse.Namespace) -> int:
         "fallback_sample_pages": report["fallback_pages"],
         "style_profile_sha256": sha256(style_path),
         "pilot_pdf": str(out), "comparison_pdf": str(pilot_dir / "Book_Pilot_Comparison.pdf"),
-        "note": "Source text, graphics, and typography still need human review; no full-book run authorized.",
+        "note": "Source text, images, typography and especially italics require source-image review; no full-book run authorized.",
+        "styles_need_visual_review": True,
+
     }
     json_write(pilot_dir / "pilot-status.json", summary)
     print(json.dumps(summary, ensure_ascii=False, indent=2))
@@ -151,6 +156,11 @@ def full(args: argparse.Namespace) -> int:
         raise ValueError("Pilot approval is absent or belongs to a different PDF")
     if approval.get("style_profile_sha256") != sha256(style_path) or style.get("source_sha256") != source_sha:
         raise ValueError("Locked typography style was modified after approval")
+    source_styles = args.work_dir / "style-annotations.json"
+    old_style_sha = style.get("style_annotations_sha256")
+    new_style_sha = sha256(source_styles) if source_styles.is_file() else None
+    if old_style_sha != new_style_sha:
+        raise ValueError("Source-verified italic styles changed since pilot approval; redo pilot")
     if style.get("ocr_backend") != "apple-vision-primary+paddle-mobile-selective":
         raise ValueError("Pilot approved for a different OCR backend; run a fresh safe pilot")
     local_font = Path(style["font_file"])
@@ -167,7 +177,8 @@ def full(args: argparse.Namespace) -> int:
     out = args.output or (args.work_dir / "output" / "Book_Full_REVIEW.pdf")
     result = build(args.source, args.work_dir, out, "full", pages,
                    style["font_family"], local_font, style["body_font_size_pt"],
-                   approval=approval_path, strict_hybrid=False, fusion_subdir="fusion_mobile")
+                   approval=approval_path, strict_hybrid=False,
+                   fusion_subdir="fusion_mobile", style_annotations=source_styles)
     print(json.dumps({
         "status": result["status"], "source_pages": result["source_page_count"],
         "output_pages": result["output_page_count"],
