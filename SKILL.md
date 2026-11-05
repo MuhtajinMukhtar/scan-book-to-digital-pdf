@@ -1,52 +1,56 @@
 ---
 name: scan-book-to-digital-pdf
-description: Convert a scanned book PDF into a readable, selectable-text digital PDF with a short user-approved pilot. Use in ChatGPT Work/Codex when the user supplies only a PDF plus the repo URL; use low-resource local OCR, deterministic PDF rendering and strict per-page QA. Avoid heavy PP-StructureV3 on Macs with memory or segmentation-fault issues.
+description: Digitize scanned PDF books into readable, selectable-text PDFs using Apple Vision first and selective lightweight PaddleOCR Mobile for uncertain pages on Mac, with a sample pilot, user approval, exact page mapping, and source-based QA. Use in ChatGPT Work or Codex when a user shares a scanned book and this GitHub repo, including on 8–16 GB Apple Silicon Macs.
 ---
 
 # Scan Book to Digital PDF
 
-## Simple user experience
+## User experience: PDF + repository link is enough
 
-When a nontechnical person provides a scanned PDF and this repository URL, **proceed using this Skill**. Don't ask whether they want to use the repo. The aim is a visible, selectable digital text book, **not** an unchanged bitmap scan with hidden OCR. Never overwrite the original.
+When the user attaches a scanned book and this repo link, proceed with the workflow; **do not ask whether to use the repo**. Do not burden a nontechnical user with OCR methods or CLI commands. Ask simple questions only when an optional download, a visual choice, or approval really needs their decision. Keep the original PDF untouched. Use a lightweight agent/model for orchestration; handle exceptions with more reasoning only when necessary.
 
-Default to source-like fonts, margins, type hierarchy and paragraph indentation where supported. If needed, ask one simple question such as "Mau huruf seperti buku aslinya, atau dibuat lebih besar?" Do not ask the user to choose Python, OCR engines, model downloads, or page numbers.
+## Core design
 
-**Model-light:** use a lighter/fast model to run the deterministic scripts and summarize QA. Escalate only difficult source-specific exceptions. Never send whole-book OCR results into model context.
+- **Primary:** Apple Vision for every processed page, cached in `work/ocr/page_###.json`. This was the successful starting point of the original Mac book experiment.
+- **Secondary (selective only):** `PP-OCRv5_mobile_det` + `PP-OCRv5_mobile_rec` via `PaddleOCR`, on *uncertain source pages* only. Not PP-StructureV3, not Tesseract by default. Never infer that PaddleOCR Mobile has the same accuracy as the previous PP-StructureV3 pilot.
+- **Light-Mac safety:** process one Mobile page at a time in a monitored child process, with RAM/time limits and small inputs. Skip mobile when no doubt is detected. A model must never be downloaded without permission. If Mobile fails, keep Apple results and flag the page for source review; no automatic expensive retry.
+- **Typesetting:** deterministic engine composes visible PDF text from source page geometry and a locked font choice; illustrated/table/uncertain layouts may need reviewed searchable-scan fallback. The current engine does not fully reproduce all italics, images, paragraph shapes or decorative layouts automatically. Never claim that it does.
 
-## Safe two-page pilot
+## Pilot: first two pages only
 
-**Default OCR: Apple Vision + Tesseract on an authorized Mac. Never start PaddlePaddle or PP-StructureV3 automatically.**
+1. Verify actual authorized **macOS** execution, input SHA/page count, available local disk, and a Python virtual environment with `requirements.txt`. No Ubuntu fallback for Apple Vision. Read `references/mac-setup.md`.
+2. Run `python scripts/run_book.py pilot --source BOOK.pdf --work-dir ./work`. This selects two representative text pages from low-res thumbnails, performs Apple Vision only and checks each page's confidence; the model is **not** used for every page.
+3. Inspect `work/pilot/Book_Pilot_REVIEW.pdf` and `Book_Pilot_Comparison.pdf`. Compare *real visible text* against the source, including font family/size, punctuation, italic emphasis, margins (allow intentional mirrored margins), first/last lines, images, and fixed page boundaries. Use `scripts/pilot_typeset_gate.py`. The same raster scan with an invisible OCR overlay is **not** a satisfactory pilot.
+4. If `work/pilot/pilot-status.json` says `PILOT_NEEDS_OCR_REVIEW`, check `work/review/SUMMARY.json`. For doubtful pages, request permission in ordinary language: **"Boleh saya pasang pemeriksa teks ringan untuk bagian yang belum jelas?"** Only with permission, install a compatible PaddleOCR Mobile environment and download its Mobile model weights as needed, per `references/mac-setup.md`. Then use:
+   `python scripts/run_book.py pilot --source BOOK.pdf --work-dir ./work --reuse-apple --enable-mobile --allow-model-download`
+   This must **reuse Apple Vision cache**. Run Mobile only for selected low-confidence pages, never all pages. If models were previously cached and download not needed, omit `--allow-model-download`.
+5. Review actual disagreements in `work/fusion_mobile/` against the source scan. A secondary OCR result is *suggestion*, not an automatically accepted correction. Maintain a per-page ledger; fix verified textual mistakes without inventing words. If a pilot is incomplete or source review remains unresolved, do not seek approval yet. Additional distinct sample pages are allowed **only after the first two-page trial is feasible**, and should reuse existing caches.
+6. Present the real pilot and ask: **"Apakah contoh ini sudah cocok, atau perlu diperbaiki?"**. Stop before processing the entire book. No silent approval.
 
-1. Check source PDF count/hash, actual macOS execution, free disk, and whether `tesseract` has **both `ind` and `eng` languages**. Read `references/mac-setup.md`. If missing, stop **before** costly jobs and request permission for minimal local installation. Do not run Apple Vision on Ubuntu/Linux.
-2. Use the deterministic driver: `python scripts/run_book.py pilot --source BOOK.pdf --work-dir ./work`. It chooses two likely text pages from low-resolution thumbnails and runs Apple Vision + Tesseract only for those pages. It caches recognized lines and makes an actual digital pilot PDF plus a side-by-side comparison.
-3. **Cache reuse:** preserve previous `work/ocr/page_###.json` Apple Vision results. Tesseract results and independent comparisons are written in `work/tesseract/` and `work/fusion_safe/`. These results are **not equivalent to Apple Vision + PaddleOCR PP-StructureV3**. Differences require source-image checking. Do not overwrite legacy Paddle caches.
-4. For font/spacing changes, reuse OCR via `--skip-ocr` and the same selected pages. The current automatic renderer is conservative: ordinary text can become visible vector text, while complex photos, tables, chapter ornaments and uncertain pages can remain **clearly labeled searchable-scan fallbacks**. It does **not** yet faithfully reproduce every bold/italic run, paragraph indent or decorative design of the previous manually curated pilot.
-5. Confirm at least **two genuinely typeset text pages** with visible/selectable glyphs, no hidden-scan pretence. Check font, left/right margins, first/last source words and QA warnings. Run `scripts/pilot_typeset_gate.py`; see `references/pilot-and-style-lock.md`. If it fails, report `PILOT_INCOMPLETE` and do not solicit full-book approval.
-6. Present the review PDF and comparison in simple language. Expand the pilot to more varied examples only if needed and the first lightweight step works, ideally reusing OCR results.
+## Only after explicit approval
 
-## Full-book gate
-
-**Stop at `PILOT_AWAITING_APPROVAL`.** After the user has actually accepted the **specific** digital pilot version (never self-approve), run:
+After the user genuinely accepts the specific digital pilot, run:
 
 ```sh
 python scripts/run_book.py approve --source BOOK.pdf --work-dir ./work --confirm APPROVE_PILOT
 python scripts/run_book.py full --source BOOK.pdf --work-dir ./work
 ```
 
-Physical source page N must equal output page N: same page count, dimensions, order and page-specific content; no silent overflow to N+1. If text does not fit within approved typography, keep that **same original page** as a searchable-scan fallback and flag it. Do not clip, omit or silently shrink text. Run the strict `scripts/page_fidelity_audit.py` on a complete, source-verified OCR reference and read `references/page-fidelity.md` plus `references/qa-and-handoff.md`. A full output remains **REVIEW** until real source comparisons and exception review pass.
+Process the remaining pages with Apple Vision first, reusing caches. Run optional selective Mobile later or with `--enable-mobile` only when it was authorized and resource feasibility is known. The full-book output is always a **REVIEW** until source comparisons and unresolved pages are resolved; it is never automatically FINAL.
 
-## Safety and truthful reporting
+**Hard page contract:** Source physical page N must remain output page N: same total count, dimensions and reading order. No missing or overflowed content may move into N+1. Preserve any nonfitting page on its own source page as a labeled searchable-scan fallback instead of clipping, shrinking or silently discarding text. Consult `references/page-fidelity.md` and `references/qa-and-handoff.md`; audit every page with `scripts/page_fidelity_audit.py` using a source-verified OCR reference.
 
-- **PP-StructureV3 is opt-in advanced legacy code** (disabled in the safe driver). It is a multi-model parser and produced high RAM usage and a native convolution segmentation fault in real Mac testing. `scripts/mac_hybrid_ocr.py` now requires explicit `--ack-heavy-ppstructure`. Never repeat such a crash on the same environment or redirect it to lower-memory Ubuntu.
-- Tesseract uses different algorithms; quality is **not guaranteed equivalent** to successful prior PaddleOCR results. Review uncertainty against actual scans; don't invent missing text.
-- If the safe second OCR isn't available, stop before doing a heavy run and ask permission for a small install. Never claim a second OCR ran if it did not; never silently substitute cloud OCR.
-- Stop when Mac is hot/sluggish, resources constrained, or Work/Codex quota heavily consumed; preserve checkpoints and cached results. No parallel heavy OCR workers. Do not alter production or publish copyrighted scans/fonts.
-- Prefer short status reports. Run `python -m unittest discover -s tests -v` for script QA. Synthetic CI passing **does not prove Mac M1 runtime stability, full visual fidelity or low usage**.
+## Stop conditions and honesty
 
-## Supporting instructions
+- Never call `scripts/mac_hybrid_ocr.py` or PP-StructureV3 automatically. Its old multi-model implementation led to large RAM usage and a segmentation fault in testing on Mac. The heavy legacy path remains explicit opt-in only, and should not be retried on the same failed environment.
+- An 8 GB Mac is a *target*, not a certified hardware guarantee. If Mobile hits its RSS/time cap, skip it, preserve the Apple cache and report the specific failure. Do not reroute to the user's smaller Ubuntu server or run a parallel batch.
+- Model downloads, software installation and full-book processing require their respective permissions/approval. Don't change Mac system Python or power settings, and don't publish copyrighted scans or fonts to the public repo.
+- GitHub synthetic tests cover logic and safety gates; **a real Mac M2/8 GB pilot and quality benchmark remain necessary** before promising resource or fidelity results.
 
-- `references/mac-setup.md` — safe Mac setup.
-- `references/resource-budget.md` — staged resource limits and caches.
-- `references/pilot-and-style-lock.md` — style profile, pilot and human approval.
-- `references/page-fidelity.md` — physical page fidelity and QA.
-- `references/qa-and-handoff.md` — final acceptance.
+## References
+
+- `references/mac-setup.md` — lightweight installation and compatibility
+- `references/resource-budget.md` — bounded work, cache and stop rules
+- `references/pilot-and-style-lock.md` — visual pilot and typography
+- `references/page-fidelity.md` — source-to-output page proof
+- `references/qa-and-handoff.md` — editorial acceptance
