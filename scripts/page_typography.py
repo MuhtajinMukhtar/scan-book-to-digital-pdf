@@ -39,7 +39,7 @@ def plan_body(body: list[dict], width: float, height: float, font_size: float) -
             groups.append([])
         groups[-1].append(line)
     positions = []
-    for group in groups:
+    for group_index,group in enumerate(groups):
         original_y = [float(x["y"])*height for x in group]
         steps = [b-a for a,b in zip(original_y,original_y[1:]) if b>a]
         step = max(font_size*1.14,
@@ -58,7 +58,7 @@ def plan_body(body: list[dict], width: float, height: float, font_size: float) -
                 **item,
                 "draw_x": x,
                 "baseline": baseline,
-                "paragraph_index": len(positions) and len(groups) or 0,
+                "paragraph_index": group_index,
                 "paragraph_last": j == len(group)-1,
                 "paragraph_line_count": len(group),
                 "line_step": round(step, 3),
