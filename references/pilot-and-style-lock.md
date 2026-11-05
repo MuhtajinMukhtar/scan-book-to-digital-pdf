@@ -14,13 +14,13 @@ Inspect all pages using PDF page count, modest thumbnails and a non-destructive 
 
 Do not immediately process all candidate pages. **First implement a two-page internal technical/typographic smoke test** (one body and one representative unusual page), compare scan vs actual visible text and verify the two OCR engines and typeset guard. Reuse those results when extending to the rest of the 5–8-page pilot. Use fewer pages for short books. Expand up to 10 only when necessary to show distinct formats and the cost/device budget allows; stop for operator review if local resources or model quota are strained. If a page type has no representative sample, record this as a later exception instead of pretending the sample covers it.
 
-**Resource gate:** Read `references/resource-budget.md` before any expensive job. Do not repeatedly run PaddleOCR or upload all full-resolution pages into the model context. Before user approval, do not OCR/compose/export the whole book. Reading a low-resolution thumbnail or page metadata from all pages *to choose samples* is allowed.
+**Resource gate:** Read `references/resource-budget.md` before any expensive job. Do not run PP-StructureV3 in the safe pipeline or upload all full-resolution pages into the model context. Before user approval, do not OCR/compose/export the whole book. Reading a low-resolution thumbnail or page metadata from all pages *to choose samples* is allowed.
 
 ## 2. Run dual OCR only for chosen samples
 
-Call `scripts/mac_hybrid_ocr.py BOOK.pdf --work-dir work --start-page N --end-page N` for each selected page, keeping the same work directory and original source SHA. Afterwards, `--compare-only` consolidates the comparison of all cached pages.
+Prefer `python scripts/run_book.py pilot --source BOOK.pdf --work-dir work --pages N,M` for two representative pages (or omit `--pages` to auto-select). It calls `scripts/mac_safe_ocr.py` with Apple Vision + Tesseract once for the selection and caches both results. For additional pages, use a small separate run with the same source/work directory; never run the heavy PP-StructureV3 method automatically.
 
-Compare Apple Vision lines with PaddleOCR PP-StructureV3 raw `overall_ocr_res.rec_texts`, **not merely exported Paddle Markdown**. Review all restored lines, proper names, unusually shaped glyphs, and discrepancies against the original scan. Keep uncertain content visible in a review log.
+Compare Apple Vision and Tesseract output in `work/fusion_safe/`, plus the actual scan image. Tesseract's quality is not guaranteed to match the prior PaddleOCR method. Review all restored lines, proper names, unusually shaped glyphs, and discrepancies against the original scan. Keep uncertain content visible in a review log.
 
 ## 3. Build one coherent typography system
 
