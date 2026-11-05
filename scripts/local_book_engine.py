@@ -73,7 +73,7 @@ def parse_pages(spec: str, count: int, mode: str) -> list[int]:
     return pages
 
 
-def load_cache(work: Path, number: int, source_sha: str, require_hybrid: bool) -> tuple[dict, list[dict]]:
+def load_cache(work: Path, number: int, source_sha: str, require_hybrid: bool, fusion_subdir: str = "fusion") -> tuple[dict, list[dict]]:
     file = work / "ocr" / f"page_{number:03d}.json"
     if not file.is_file():
         raise ValueError(f"Missing cached Apple Vision OCR for source page {number}")
@@ -84,7 +84,7 @@ def load_cache(work: Path, number: int, source_sha: str, require_hybrid: bool) -
         raise ValueError(f"Unsupported OCR engine on page {number}: {data.get('engine')}")
     if require_hybrid and data["engine"] != "apple-vision":
         raise ValueError(f"Apple Vision missing on page {number}: no false hybrid claims")
-    fusion_file = work / "fusion" / f"page_{number:03d}.json"
+    fusion_file = work / fusion_subdir / f"page_{number:03d}.json"
     if require_hybrid and not fusion_file.exists():
         raise ValueError(f"Paddle comparison absent on page {number}")
     issues = []
@@ -92,6 +92,11 @@ def load_cache(work: Path, number: int, source_sha: str, require_hybrid: bool) -
         fused = json.loads(fusion_file.read_text(encoding="utf-8"))
         if fused.get("page") != number or fused.get("source_sha256") != source_sha:
             raise ValueError(f"Fusion identity/source mismatch on page {number}")
+        if fusion_subdir == "fusion_safe" and (
+            fused.get("primary_engine") != "apple-vision" or
+            fused.get("secondary_engine") != "tesseract"
+        ):
+            raise ValueError(f"Safe OCR evidence is not Apple Vision + Tesseract on page {number}")
         issues = fused.get("issues", [])
     return data, issues
 
@@ -220,7 +225,7 @@ def fallback_page(out: fitz.Document, original: fitz.Document, idx: int, lines: 
 def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
           family: str, fontfile: Path, font_size: float | None,
           keep_footer: bool = True, strict_hybrid: bool = True,
-          approval: Path | None = None) -> dict:
+          approval: Path | None = None, fusion_subdir: str = "fusion") -> dict:
     source_sha = sha256(source)
     if source.resolve() == dest.resolve():
         raise ValueError("Output must never overwrite the source")
@@ -243,7 +248,7 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
     font = fitz.Font(fontfile=str(fontfile))
     data = []
     for num in page_list:
-        cache, issues = load_cache(work, num, source_sha, require_hybrid=strict_hybrid)
+        cache, issues = load_cache(work, num, source_sha, require_hybrid=strict_hybrid, fusion_subdir=fusion_subdir)
         lines = usable_lines(cache)
         data.append((num, lines, issues))
     suggested = recommended_size([(doc[n-1].rect, lines) for n, lines, _ in data], font)
@@ -260,7 +265,10 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         reasons = []
         if len(lines) < 7:
             reasons.append("not enough recognized body lines")
-        if issues:
+        # The safe Tesseract second opinion is often more noisy than Apple Vision.
+        # It is a QA warning, not a reason to discard every otherwise safe
+        # visible pilot page. Keep the result explicitly unverified.
+        if issues and fusion_subdir != "fusion_safe":
             reasons.append("Apple/Paddle disagreement awaiting source review")
         ink_score = unrecognized_ink(src, lines)
         if ink_score > 1:
@@ -275,7 +283,7 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         if reasons:
             fallback_page(output, doc, number - 1, lines)
         rows.append({"source_page": number, "output_page": len(output),
-                     "mode": mode_name, "ocr_issues": len(issues),
+                     "mode": mode_name, "ocr_issues": len(issues), "ocr_review_required": bool(issues),
                      "detected_nontext_ink_score": round(ink_score, 3),
                      "reasons": reasons})
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -293,7 +301,7 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
     temp.replace(dest)
     counts = Counter(row["mode"] for row in rows)
     report = {"status": "REVIEW_REQUIRED", "note": "Not an editorial fidelity certification.",
-              "source_sha256": source_sha, "source_page_count": len(doc),
+              "source_sha256": source_sha, "ocr_backend": ("apple-vision+tesseract" if fusion_subdir == "fusion_safe" else "legacy-paddle"), "source_page_count": len(doc),
               "output_page_count": len(page_list), "mapping": page_list,
               "font_family": family, "font_file_name": fontfile.name,
               "body_font_size_pt": size, "digital_pages": counts["born_digital_unverified"],
