@@ -347,8 +347,10 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
           family: str, fontfile: Path, font_size: float | None,
           keep_footer: bool = True, strict_hybrid: bool = True,
           approval: Path | None = None, fusion_subdir: str = "fusion",
-          style_annotations: Path | None = None) -> dict:
+          style_annotations: Path | None = None,
+          verified_cover_pages: set[int] | None = None) -> dict:
     source_sha = sha256(source)
+    verified_cover_pages = set(verified_cover_pages or ())
     if source.resolve() == dest.resolve():
         raise ValueError("Output must never overwrite the source")
     report_path = dest.with_suffix(".qa.json")
@@ -370,11 +372,16 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         if annotations.get("source_sha256") != source_sha:
             raise ValueError("Style annotations do not match the source PDF hash")
     doc = fitz.open(source)
+    if verified_cover_pages - {1, len(doc)}:
+        raise ValueError("Only first or last physical page may be an exempt cover")
     if mode == "full" and page_list != list(range(1, len(doc)+1)):
         raise ValueError("Cannot publish incomplete full-book page mapping")
     font = fitz.Font(fontfile=str(fontfile))
     data = []
     for num in page_list:
+        if num in verified_cover_pages:
+            data.append((num, [], []))
+            continue  # A verified cover is preserved without wasting OCR cycles.
         cache, issues = load_cache(work, num, source_sha, require_hybrid=strict_hybrid, fusion_subdir=fusion_subdir)
         lines = usable_lines(cache)
         data.append((num, lines, issues))
@@ -388,6 +395,20 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
     rows = []
     for number, lines, issues in data:
         src = doc[number - 1]
+        if number in verified_cover_pages:
+            fallback_page(output, doc, number - 1, [])
+            rows.append({
+                "source_page": number,
+                "output_page": len(output),
+                "mode": "verified_cover_raster_exempt",
+                "ocr_issues": 0, "ocr_review_required": False,
+                "ocr_secondary_status": None,
+                "detected_nontext_ink_score": 0.0,
+                "reasons": ["source_scan_verified_cover_exception"],
+                "warnings": [],
+                "source_verified_italic_spans": 0,
+            })
+            continue
         mode_name = "searchable_scan_fallback"
         reasons = []
         warnings = []
@@ -455,6 +476,7 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
               "body_font_size_pt": size, "digital_pages": counts["born_digital_unverified"],
               "fallback_pages": counts["searchable_scan_fallback"],
               "per_page": rows,
+              "verified_cover_pages": sorted(verified_cover_pages),
               "typography_layout_version": 2,
               "style_annotations_sha256": sha256(style_annotations) if style_annotations and style_annotations.exists() else None}
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
