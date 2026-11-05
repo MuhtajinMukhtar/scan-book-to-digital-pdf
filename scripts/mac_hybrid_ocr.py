@@ -4,8 +4,8 @@
 The two OCR results are preserved separately. This does NOT auto-merge guesses
 into the final book or replace editorial review of the original page images.
 
-Full run (macOS):
-  python scripts/mac_hybrid_ocr.py book.pdf --work-dir work
+ADVANCED EXPERIMENTAL ONLY; never run on a Mac that already had a crash:
+  python scripts/mac_hybrid_ocr.py book.pdf --work-dir work --ack-heavy-ppstructure
 Inspect existing cached results without PaddleOCR installed (any OS):
   python scripts/mac_hybrid_ocr.py --work-dir work --compare-only
 """
@@ -205,6 +205,8 @@ def main() -> int:
     p.add_argument("--end-page", type=int)
     p.add_argument("--languages", default="id-ID,en-US")
     p.add_argument("--compare-only", action="store_true", help="Compare cached raw Apple/Paddle outputs without running OCR")
+    p.add_argument("--ack-heavy-ppstructure", action="store_true",
+                   help="Explicit advanced opt-in: PP-StructureV3 can exhaust RAM or crash on some Macs")
     a = p.parse_args()
     try:
         selection = None
@@ -219,6 +221,10 @@ def main() -> int:
         if a.compare_only:
             print(json.dumps(compare_cached(a.work_dir, a.start_page, a.end_page, page_subset=selection), ensure_ascii=False, indent=2))
         else:
+            if not a.ack_heavy_ppstructure:
+                raise RuntimeError("Heavy PP-StructureV3 is disabled by default after Mac RAM/segfault failures. "
+                                   "Use scripts/mac_safe_ocr.py for Apple Vision + Tesseract. "
+                                   "Only opt in to this advanced path after separate environment compatibility testing.")
             if a.source is None:
                 p.error("Source PDF required unless --compare-only")
             if a.dpi < 100 or a.dpi > 400:
