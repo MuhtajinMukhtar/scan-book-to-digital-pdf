@@ -256,10 +256,10 @@ def digital_footer(page: fitz.Page, src: fitz.Page, items: list[dict],
     if any(max(p[c] for p in colors)-min(p[c] for p in colors) > 90 for c in range(3)):
         return False
     box = fitz.Rect(max(0,x-1),max(0,y-1),min(width,x+w+1),min(height,y+h+1))
-    page.draw_rect(box,color=None,fill=tuple(c/255 for c in bg),overlay=True)
     foot_size = max(7,min(13,h*.87))
     if base_font.text_length(line["text"],fontsize=foot_size) > w + 6:
         return False
+    page.draw_rect(box,color=None,fill=tuple(c/255 for c in bg),overlay=True)
     page.insert_text((x,y+foot_size*.93),line["text"],fontname="BookBody",
                      fontsize=foot_size,color=(.45,.45,.45),overlay=True)
     return True
@@ -272,6 +272,9 @@ def typeset_page(out: fitz.Document, original: fitz.Document, idx: int, lines: l
     page = out.new_page(width=src.rect.width,height=src.rect.height)
     page.insert_font(fontname="BookBody",fontfile=str(fontfile))
     italic_phrases = italic_phrases or []
+    for phrase in italic_phrases:
+        if not any(phrase in entry["text"] for entry in lines):
+            return False, "reviewed italic phrase not present in OCR on this page"
     italic_file = italic_font_file(fontfile)
     if italic_phrases and italic_file is None:
         return False, "matching italic font unavailable; source styles need review"
@@ -307,10 +310,12 @@ def typeset_page(out: fitz.Document, original: fitz.Document, idx: int, lines: l
             return False,str(exc)
         if not ok:
             return False,"source line would overflow at approved font size"
+    footer_warning = ""
     if keep_footer and footer:
-        # Digitalize an unambiguous source page number, without erasing its
-        # decorative frame or moving it to another page.
-        digital_footer(page,src,footer,font,size)
+        # Preserve decorations; report whenever the original page number
+        # could not be safely replaced with visible, selectable PDF text.
+        if not digital_footer(page,src,footer,font,size):
+            footer_warning = "footer_number_still_raster_review_needed"
     elif footer:
         return False,"source footer digit not preserved"
     generated = word_counts(page.get_text("text"))
@@ -323,7 +328,7 @@ def typeset_page(out: fitz.Document, original: fitz.Document, idx: int, lines: l
                 if x.get("type")!=3)
     if visible<65:
         return False,"insufficient visible vector text"
-    return True,""
+    return True,footer_warning
 
 
 def fallback_page(out: fitz.Document, original: fitz.Document, idx: int, lines: list[dict]) -> None:
@@ -380,6 +385,7 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         src = doc[number - 1]
         mode_name = "searchable_scan_fallback"
         reasons = []
+        warnings = []
         if len(lines) < 7:
             reasons.append("not enough recognized body lines")
         # The safe Tesseract second opinion is often more noisy than Apple Vision.
@@ -397,6 +403,8 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
             )
             if ok:
                 mode_name = "born_digital_unverified"
+                if reason:
+                    warnings.append(reason)
             else:
                 reasons.append(reason)
                 output.delete_page(len(output) - 1)
@@ -415,7 +423,7 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
                      "mode": mode_name, "ocr_issues": len(issues),
                      "ocr_review_required": bool(issues or review_reasons), "ocr_secondary_status": review_status,
                      "detected_nontext_ink_score": round(ink_score, 3),
-                     "reasons": reasons,
+                     "reasons": reasons, "warnings": warnings,
                      "source_verified_italic_spans": len(verified_italics(annotations, number))})
     dest.parent.mkdir(parents=True, exist_ok=True)
     output.save(temp, garbage=3, deflate=True)
