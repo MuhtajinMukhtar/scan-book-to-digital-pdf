@@ -206,10 +206,16 @@ def select_diverse(source: Path, count: int = 7, keep_pages: list[int] | None = 
             (c for c in candidates if c["source_page"] not in chosen),
             key=lambda c:(-c["scores"][role], c["source_page"]),
         )
-        # Avoid near-adjacent source pages unless no alternatives exist.
-        eligible=[c for c in ranked if all(abs(c["source_page"]-p)>=3 for p in chosen)]
-        if not eligible:
+        # Distinct page *types* matter more than source distance. A table
+        # directly before an ordinary prose page is a valuable pilot sample.
+        # Apply spacing only to weaker body/sparse candidates.
+        if role in ("table_candidate", "illustration_candidate",
+                    "chapter_opener_candidate", "mixed_typography_candidate"):
             eligible=ranked
+        else:
+            eligible=[c for c in ranked if all(abs(c["source_page"]-p)>=3 for p in chosen)]
+            if not eligible:
+                eligible=ranked
         if not eligible:
             break
         number=eligible[0]["source_page"]
