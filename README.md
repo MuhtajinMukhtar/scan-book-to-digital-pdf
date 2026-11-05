@@ -1,56 +1,68 @@
 # Scan Book to Digital PDF
 
-Ubah PDF hasil scan menjadi **buku digital yang teksnya bisa dipilih, disalin, dan dicari**. Buku sumber tidak diubah.
+Ubah PDF buku hasil scan menjadi **PDF digital dengan teks nyata yang dapat dipilih, dicari, dan disalin**. Tetap jaga ilustrasi, tabel, ejaan, dan isi **pada halaman sumber masing-masing**.
 
-## Untuk pengguna ChatGPT Work (tanpa pengetahuan teknis)
+## Untuk orang nonteknis
 
-**Cukup unggah PDF dan kirim link repo ini:**
+**Cukup unggah file PDF dan berikan link repo ini ke ChatGPT Work / Codex:**
+
 https://github.com/MuhtajinMukhtar/scan-book-to-digital-pdf
 
-AI akan mengikuti `SKILL.md`, membuat **pilot dua halaman** terlebih dahulu, lalu meminta persetujuan sebelum memproses seluruh buku. Jika ada komponen yang perlu dipasang di Mac, AI meminta izin dalam bahasa sederhana. Pengguna tidak harus memilih mesin OCR atau mengetik perintah.
+AI akan membuat **contoh dua halaman terlebih dahulu**, menunjukkan perbandingannya dengan scan, lalu meminta persetujuan sebelum mengerjakan semua halaman. Anda tidak perlu memahami istilah OCR, font embedding atau command line.
 
-**Jangan menyetujui pilot yang hanya menampilkan scan asli dengan teks tersembunyi.** Harus ada contoh dengan teks digital yang benar-benar terlihat dan tata letak yang diperiksa.
+## Alur utama sekarang
 
-## Perubahan penting: hemat sumber daya
+**Apple Vision menjadi pembaca teks utama.** Ini mengadopsi langkah yang berhasil pada eksperimen buku pertama di Mac. Hasil disimpan per halaman agar tidak perlu diproses ulang.
 
-Pengujian pada Mac menunjukkan **PP-StructureV3 (PaddleOCR) menghabiskan memori besar dan mengalami segmentation fault**. Karena itu versi terbaru tidak lagi menjalankan PP-StructureV3 secara otomatis.
+**PaddleOCR PP-OCRv5 Mobile hanya menjadi pemeriksa tambahan pada halaman yang terindikasi meragukan**, bukan pembaca kedua untuk seluruh buku. Jika model Mobile belum ada dan memang dibutuhkan, AI meminta izin terlebih dahulu untuk pemasangan/unduhannya.
 
-**Alur aman sekarang: Apple Vision + Tesseract** pada Mac. Tesseract adalah pembanding OCR yang lebih sederhana; **kualitasnya belum terbukti setara dengan hasil Apple Vision + PaddleOCR sebelumnya**. Halaman dengan perbedaan teks atau tata letak sulit tetap perlu diperiksa terhadap gambar scan.
+- **Tidak menggunakan PP-StructureV3 otomatis.** PP-StructureV3 pernah menghabiskan memori besar dan crash dalam uji Work.
+- **Tidak memakai Tesseract sebagai default.** Skrip historisnya tetap tersedia tetapi bukan alur utama.
+- **Prioritas Mac 8 GB dan 16 GB:** pekerjaan bertahap, maksimum satu halaman Mobile per batch awal, pembatasan RAM/waktu, dan cache OCR. **Belum ada klaim bahwa semua Mac 8 GB pasti bisa menjalankan Mobile.**
+- **Model ChatGPT ringan boleh dipakai** untuk mengoperasikan skrip. Tidak ada kebutuhan model High untuk membaca setiap halaman.
 
-Pekerjaan utama dijalankan skrip lokal, **tidak perlu model High** untuk setiap halaman. Jika mesin OCR yang aman tidak tersedia, AI harus berhenti tanpa mengulang metode yang sudah crash atau memindahkan pekerjaan ke Ubuntu yang lebih sempit memorinya.
+## Pengguna teknis / AI Agent
 
-## Untuk AI Agent / pengguna teknis
-
-Baca [SKILL.md](SKILL.md) dan [setup Mac](references/mac-setup.md). Perintah dasar:
-
-```sh
-python scripts/run_book.py pilot --source "/path/to/scan-buku.pdf" --work-dir ./work
-```
-
-Output pilot: `work/pilot/Book_Pilot_REVIEW.pdf` dan `work/pilot/Book_Pilot_Comparison.pdf`. OCR akan disimpan pada `work/ocr/` (Apple Vision), `work/tesseract/`, dan `work/fusion_safe/` (perbandingan). Untuk menyusun ulang PDF contoh tanpa OCR ulang:
+Baca [SKILL.md](SKILL.md) dan [panduan Mac](references/mac-setup.md). Sesudah setup dasar, jalankan:
 
 ```sh
-python scripts/run_book.py pilot --source "/path/to/scan-buku.pdf" --work-dir ./work --skip-ocr
+python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work
 ```
 
-**Hanya setelah user menyetujui PDF pilot yang nyata:**
+Hasil awal: `work/pilot/Book_Pilot_REVIEW.pdf`, `Book_Pilot_Comparison.pdf`, `pilot-status.json`. Jika skor Apple Vision menyarankan pemeriksaan tambahan, lakukan itu **hanya setelah persetujuan untuk Mobile/install/model download**:
 
 ```sh
-python scripts/run_book.py approve --source "/path/to/scan-buku.pdf" --work-dir ./work --confirm APPROVE_PILOT
-python scripts/run_book.py full --source "/path/to/scan-buku.pdf" --work-dir ./work
+python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work --reuse-apple --enable-mobile --allow-model-download
 ```
 
-Versi sekarang adalah **mesin otomatis tahap awal**. Teks normal dapat ditata ulang dengan font konsisten; halaman bergambar, tabel, tipografi rumit, atau OCR yang tidak pasti mungkin tetap memakai scan asli dengan lapisan teks untuk dicari, diberi label `searchable_scan_fallback`. Mesin belum otomatis meniru semua cetak miring, indentasi dan elemen dekoratif seperti contoh hasil editorial manual sebelumnya.
+Opsi `--reuse-apple` **tidak menjalankan ulang** halaman yang sudah dibaca Apple Vision. Jika model Mobile sudah di-cache, hapus opsi `--allow-model-download`.
 
-**Aturan mutu:** jumlah halaman harus identik; halaman sumber N harus tetap menjadi halaman hasil N tanpa isi hilang atau meluber. Laporan mesin bukan bukti mutlak: verifikasi tiap halaman, periksa sumber, dan terapkan [audit page fidelity](references/page-fidelity.md).
+Untuk perbaikan layout/font saja, tanpa OCR ulang sama sekali:
 
-## Pengujian
+```sh
+python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work --skip-ocr
+```
+
+**Hanya setelah contoh digital disetujui pengguna:**
+
+```sh
+python scripts/run_book.py approve --source "/path/to/book.pdf" --work-dir ./work --confirm APPROVE_PILOT
+python scripts/run_book.py full --source "/path/to/book.pdf" --work-dir ./work
+```
+
+## Kualitas dan keterbatasan
+
+Skrip otomatis saat ini menata ulang **teks biasa** dengan tipografi terkontrol. Halaman bergambar, tabel, banyak cetak miring, atau teks yang belum terverifikasi **bisa tetap memakai scan asli yang searchable** dan harus ditandai untuk review. Hasil belum tentu setara dengan pilot manual yang dulu dipoles oleh agen High.
+
+**Aturan wajib:** PDF sumber dan hasil mempunyai jumlah serta ukuran halaman yang sama. Tidak boleh ada paragraf atau gambar yang diam-diam meluber ke halaman berikut. Untuk buku penuh, setiap halaman harus diverifikasi terhadap sumber menggunakan [audit per halaman](references/page-fidelity.md). Laporan otomatis bukan jaminan karakter demi karakter.
+
+## Tes
 
 ```sh
 pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-Tes otomatis memakai data sintetis, bukan uji nyata Apple Silicon. Sampai uji Mac berhasil, jangan menjanjikan pemrosesan 220 halaman otomatis atau penghematan kuota yang terukur.
+CI menjalankan **tes sintetis** tanpa mengunduh model Paddle dan tanpa memakai data buku pengguna. Sebelum menyatakan siap dipakai luas, uji langsung **Apple Vision + PaddleOCR Mobile pada Mac M2 8 GB** beserta RAM, waktu, dan mutu halaman.
 
-**Privasi dan hak cipta:** jangan unggah scan buku, cache OCR, foto pribadi, atau font berlisensi ke repository publik. Lisensi kode: [MIT](LICENSE).
+Repository tidak berisi file buku berhak cipta, cache OCR pengguna, atau font berlisensi. Lisensi kode: [MIT](LICENSE).
