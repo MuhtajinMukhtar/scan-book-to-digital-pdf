@@ -10,11 +10,38 @@ Ubah **PDF buku hasil scan** menjadi buku digital yang lebih nyaman dibaca. Teks
 
 > **Tolong ubah PDF buku ini menjadi buku digital yang nyaman dibaca. Ikuti panduan https://github.com/MuhtajinMukhtar/scan-book-to-digital-pdf dan bimbing saya dengan pilihan sederhana.**
 
-**3.** AI terlebih dahulu menguji **2 halaman** secara internal, lalu memperluas menjadi **contoh 5–8 halaman** jika berjalan baik, tanpa meminta Anda mengatur alat teknis. dengan berbagai bentuk halaman dalam buku, dengan jenis, ukuran, dan gaya tulisan semirip mungkin dengan sumber. Anda boleh menjawab **"ikuti aslinya saja"** untuk pengaturan huruf.
+**3.** AI membuat dua contoh halaman teks terlebih dahulu, dan menambah contoh lain bila diperlukan untuk memperlihatkan gambar, judul bab, atau tabel. Tidak perlu mengatur perangkat lunak sendiri. dengan berbagai bentuk halaman dalam buku, dengan jenis, ukuran, dan gaya tulisan semirip mungkin dengan sumber. Anda boleh menjawab **"ikuti aslinya saja"** untuk pengaturan huruf.
 
 **4.** Pastikan contoh sebelah kanan **benar-benar dibuat ulang menggunakan teks digital**, bukan foto scan yang sama dengan lapisan pencarian. Lihat PDF contoh dan jawab **"Cocok, lanjutkan"** atau **"Perbaiki bagian ini"**. **AI baru mengerjakan seluruh halaman setelah contoh disetujui.**
 
 Anda tidak perlu memahami istilah OCR, PaddleOCR, program, atau terminal.
+
+## Hemat kuota: program lokal sebagai pelaksana utama
+
+**Tidak wajib memakai model High.** Model ringan cukup untuk membaca Skill, menjalankan satu perintah, menampilkan PDF pilot dan menyampaikan hasil QA. Program lokal mengolah sebagian besar halaman tanpa mengirim tiap teks halaman ke AI.
+
+Agen pada Mac yang diizinkan menjalankan:
+
+```sh
+python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work
+```
+
+Program memilih dua contoh halaman teks dari pratinjau resolusi rendah, kemudian memakai **Apple Vision + PaddleOCR PP-StructureV3 hanya untuk dua halaman tersebut**. Halaman contoh digital dan perbandingan tersedia di `work/pilot/`. Jika perlu memperbaiki jenis huruf atau margin, **gunakan cache OCR**, jangan mengulang pengenalan teks:
+
+```sh
+python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work --skip-ocr
+```
+
+Agen harus memeriksa hasil nyata terlebih dahulu; bila dua contoh belum mewakili variasi layout, pilih beberapa halaman lain secara bertahap. Setelah pengguna menyetujui contoh yang benar-benar ditata ulang, agen mencatat persetujuan dan baru menjalankan seluruh buku:
+
+```sh
+python scripts/run_book.py approve --source "/path/to/book.pdf" --work-dir ./work --confirm APPROVE_PILOT
+python scripts/run_book.py full --source "/path/to/book.pdf" --work-dir ./work
+```
+
+**Batas kemampuan versi awal:** penyusun otomatis menata teks biasa dalam ukuran dan keluarga font yang dikunci. Halaman dengan tabel, foto, perbedaan OCR yang belum dipastikan atau layout yang tidak aman akan dipertahankan sebagai *scan asli yang dapat dicari*, **bukan dibuang atau dipalsukan sebagai halaman digital**. Beberapa detail seperti italic di tengah kalimat dan desain bab masih memerlukan penanganan editorial. Semua output tetap berstatus **REVIEW**. Ini belum terbukti dapat menggantikan kualitas pilot manual sepenuhnya pada buku apa pun.
+
+**Batas lingkungan:** Apple Vision harus dijalankan di Mac yang benar-benar tersedia/diizinkan. Jika Work atau Codex menjalankan Linux terpisah tanpa akses Mac, jangan mengaku telah memakai Apple Vision. Pelaporan error lebih baik daripada mengarang hasil.
 
 ## Bagaimana AI memproses buku?
 
