@@ -18,6 +18,7 @@ import sys
 import fitz
 from local_book_engine import build, comparison, font_path, parse_pages, sha256
 from select_pilot_pages import choose
+from pilot_archetypes import select_diverse, contact_sheet
 
 
 HERE = Path(__file__).resolve().parent
@@ -52,16 +53,47 @@ def json_write(path: Path, value: dict) -> None:
 
 
 def pilot(args: argparse.Namespace) -> int:
+    """Two-page smoke test, then distinct-source archetype review before approval."""
+    pilot_dir = args.work_dir / "pilot"
+    with fitz.open(args.source) as doc:
+        total = len(doc)
+    src_hash = sha256(args.source)
     if args.pages == "auto":
-        selection = choose(args.source, count=2)
-        pages = selection["pages"]
-        args.work_dir.mkdir(parents=True, exist_ok=True)
-        json_write(args.work_dir / "pilot" / "selection.json", selection)
+        if args.stage == "smoke":
+            selection = choose(args.source, count=2)
+            selection["source_sha256"] = src_hash
+            selection["pilot_stage"] = "smoke"
+            pages = selection["pages"]
+            json_write(pilot_dir / "selection.json", selection)
+        else:
+            smoke_file = pilot_dir / "selection.json"
+            keep = []
+            if smoke_file.is_file():
+                old = json.loads(smoke_file.read_text(encoding="utf-8"))
+                if old.get("source_sha256") == src_hash:
+                    keep = old.get("pages", [])
+            selection = select_diverse(args.source, count=args.review_count,
+                                       keep_pages=keep)
+            selection["source_sha256"] = src_hash
+            selection["pilot_stage"] = "review"
+            pages = selection["pages"]
+            json_write(pilot_dir / "review-selection.json", selection)
+            contact_sheet(args.source, selection,
+                          pilot_dir / "Source_Review_Candidates.pdf")
     else:
         with fitz.open(args.source) as doc:
             pages = parse_pages(args.pages, len(doc), "pilot")
-    if len(pages) < 2:
-        raise ValueError("A meaningful typographic pilot requires at least 2 source pages")
+        selection = {
+            "pilot_stage": args.stage, "pages": pages, "source_sha256": src_hash,
+            "method": "manual selection of source physical page numbers",
+            "human_visual_verification_required": True,
+        }
+        json_write(pilot_dir / ("selection.json" if args.stage=="smoke"
+                                else "review-selection.json"), selection)
+    if len(pages) < min(2, total):
+        raise ValueError("Pilot must contain at least two pages for a multi-page book")
+    min_review = min(total, 5)
+    enough_variety = args.stage == "review" and len(pages) >= min_review
     ocr_summary = None
     if not args.skip_ocr:
         ocr_summary = run_ocr(args.source, args.work_dir, pages, args.dpi,
@@ -69,7 +101,6 @@ def pilot(args: argparse.Namespace) -> int:
                               args.allow_model_download, args.max_mobile_pages,
                               skip_vision=args.reuse_apple)
     local_font = font_path(args.font_family, args.font_file)
-    pilot_dir = args.work_dir / "pilot"
     out = pilot_dir / "Book_Pilot_REVIEW.pdf"
     source_styles = args.work_dir / "style-annotations.json"
     report = build(args.source, args.work_dir, out, "pilot", pages,
@@ -88,33 +119,53 @@ def pilot(args: argparse.Namespace) -> int:
         "style_annotations_sha256": (sha256(source_styles) if source_styles.is_file() else None),
         "engine_version": 3,
         "ocr_backend": "apple-vision-primary+paddle-mobile-selective",
+        "pilot_stage": args.stage,
     }
     style_path = pilot_dir / "style-profile.json"
     json_write(style_path, style)
-    needs_more = report["digital_pages"] < 2
+    insufficient_digital = report["digital_pages"] < min(2,len(pages))
     if ocr_summary is None:
-        previous = args.work_dir / "review" / "SUMMARY.json"
-        if previous.exists():
-            ocr_summary = json.loads(previous.read_text(encoding="utf-8"))
-    pending = sorted(set((ocr_summary or {}).get("secondary_pending_pages", [])) & set(pages))
+        review_path = args.work_dir / "review" / "SUMMARY.json"
+        if review_path.exists():
+            previous = json.loads(review_path.read_text(encoding="utf-8"))
+            if previous.get("source_sha256") == src_hash:
+                ocr_summary = previous
+    pending = sorted(set((ocr_summary or {}).get("secondary_pending_pages", []))
+                     & set(pages))
+    status = ("PILOT_INCOMPLETE" if insufficient_digital else
+              "PILOT_SMOKE_COMPLETE" if args.stage == "smoke" else
+              "PILOT_INSUFFICIENT_VARIETY" if not enough_variety else
+              "PILOT_NEEDS_OCR_REVIEW" if pending else
+              "PILOT_AWAITING_APPROVAL")
     summary = {
-        "status": ("PILOT_INCOMPLETE" if needs_more else
-                   "PILOT_NEEDS_OCR_REVIEW" if pending else
-                   "PILOT_AWAITING_APPROVAL"),
+        "status": status,
+        "pilot_stage": args.stage,
+        "source_page_count": total,
+        "selected_pages": pages,
+        "pilot_pages": len(pages),
+        "minimum_representative_pages": min_review,
+        "candidate_roles": selection.get("roles", {}),
+        "candidate_roles_not_verified": True,
+        "needs_agent_inspection_of_thumbnails": args.stage=="review",
+        "source_thumbnail_overview": (str(pilot_dir / "Source_Review_Candidates.pdf")
+                                       if args.stage=="review" and args.pages=="auto" else None),
         "digital_sample_pages": report["digital_pages"],
-        "ocr_primary": "apple-vision", "ocr_secondary": "paddle-ppocrv5-mobile-only-if-needed",
+        "ocr_primary": "apple-vision",
+        "ocr_secondary": "paddle-ppocrv5-mobile-only-if-needed",
         "secondary_pending_pages": pending,
         "secondary_pending_reasons": (ocr_summary or {}).get("secondary_pending_reasons", {}),
         "fallback_sample_pages": report["fallback_pages"],
         "style_profile_sha256": sha256(style_path),
-        "pilot_pdf": str(out), "comparison_pdf": str(pilot_dir / "Book_Pilot_Comparison.pdf"),
-        "note": "Source text, images, typography and especially italics require source-image review; no full-book run authorized.",
+        "pilot_pdf": str(out),
+        "comparison_pdf": str(pilot_dir / "Book_Pilot_Comparison.pdf"),
+        "note": ("Two pages are a technical smoke test, NOT enough for final "
+                 "user approval. Review must include distinct source archetypes; "
+                 "label scan fallbacks; verify page types in the contact sheet."),
         "styles_need_visual_review": True,
-
     }
     json_write(pilot_dir / "pilot-status.json", summary)
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
-    return 0 if not needs_more else 2
+    print(json.dumps(summary,ensure_ascii=False,indent=2))
+    return 0 if not insufficient_digital else 2
 
 
 def approve(args: argparse.Namespace) -> int:
@@ -127,8 +178,13 @@ def approve(args: argparse.Namespace) -> int:
         raise ValueError("No completed pilot found")
     status = json.loads(status_path.read_text(encoding="utf-8"))
     style = json.loads(style_path.read_text(encoding="utf-8"))
-    if status.get("status") != "PILOT_AWAITING_APPROVAL":
-        raise ValueError("Pilot has fewer than two verified visible typeset candidates")
+    if status.get("pilot_stage") != "review" or status.get("status") != "PILOT_AWAITING_APPROVAL":
+        raise ValueError("Full-book approval requires a diverse, source-checked REVIEW pilot, not a two-page smoke test")
+    if status.get("source_page_count") != len(fitz.open(args.source)):
+        raise ValueError("Pilot summary count does not match the supplied book")
+    required = min(status["source_page_count"],5)
+    if len(set(status.get("selected_pages",[]))) < required:
+        raise ValueError("Pilot samples do not cover enough distinct physical pages")
     if style.get("source_sha256") != sha256(args.source):
         raise ValueError("Pilot belongs to a different original PDF")
     record = {
@@ -213,6 +269,10 @@ def main() -> int:
             p.add_argument("--max-mobile-pages", type=int, default=1,
                            help="Hard cap on additional Mobile OCR pages per run")
         if name == "pilot":
+            p.add_argument("--stage", choices=["smoke","review"], default="smoke",
+                           help="First 2-page smoke test, then 6-8-page representative review")
+            p.add_argument("--review-count", type=int, default=7,
+                           help="Count of distinct physical sample pages, 5..8")
             p.add_argument("--pages", default="auto")
             p.add_argument("--font-family", choices=["serif", "sans"], default="sans")
             p.add_argument("--font-file")
@@ -225,6 +285,8 @@ def main() -> int:
     args = parser.parse_args()
     if not args.source.is_file():
         parser.error("Source PDF not found")
+    if hasattr(args,"review_count") and not 5 <= args.review_count <= 8:
+        parser.error("--review-count must be between 5 and 8")
     if hasattr(args, "reuse_apple") and args.reuse_apple and args.skip_ocr:
         parser.error("--reuse-apple and --skip-ocr are mutually exclusive")
     if hasattr(args, "max_mobile_pages") and not 0 <= args.max_mobile_pages <= 5:
