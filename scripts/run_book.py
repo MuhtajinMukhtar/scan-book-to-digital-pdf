@@ -2,7 +2,7 @@
 """Mac-friendly low-token driver: pilot -> human approval -> full book.
 
 The AI's job is to call this program, review exceptional pages, and present
-the pilot to the user. The OCR engines and PDF layout run locally without
+the pilot to the user. Apple Vision + Tesseract (not the crash-prone PP-StructureV3) and PDF layout run locally without
 per-page LLM calls. Run --help for controls.
 """
 from __future__ import annotations
@@ -24,11 +24,12 @@ HERE = Path(__file__).resolve().parent
 
 
 def run_ocr(source: Path, work: Path, pages: list[int] | None, dpi: int, cpu_threads: int = 2) -> None:
-    cmd = [sys.executable, str(HERE / "mac_hybrid_ocr.py"), str(source),
+    cmd = [sys.executable, str(HERE / "mac_safe_ocr.py"), str(source),
            "--work-dir", str(work), "--dpi", str(dpi)]
     if pages is not None:
         cmd += ["--pages", ",".join(str(i) for i in pages)]
     env = os.environ.copy()
+    # Safe mode never imports PaddlePaddle. Do not silently switch back to PPStructureV3.
     # Process-local limits only: do not change Mac system settings.
     for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
         env[variable] = str(cpu_threads)
@@ -57,7 +58,7 @@ def pilot(args: argparse.Namespace) -> int:
     pilot_dir = args.work_dir / "pilot"
     out = pilot_dir / "Book_Pilot_REVIEW.pdf"
     report = build(args.source, args.work_dir, out, "pilot", pages,
-                   args.font_family, local_font, args.font_size)
+                   args.font_family, local_font, args.font_size, fusion_subdir="fusion_safe")
     comparison(args.source, out, pages, pilot_dir / "Book_Pilot_Comparison.pdf")
     style = {
         "source_sha256": report["source_sha256"],
@@ -67,7 +68,8 @@ def pilot(args: argparse.Namespace) -> int:
         "font_file": str(local_font.resolve()),
         "font_file_sha256": sha256(local_font),
         "body_font_size_pt": report["body_font_size_pt"],
-        "engine_version": 1,
+        "engine_version": 2,
+        "ocr_backend": "apple-vision+tesseract",
     }
     style_path = pilot_dir / "style-profile.json"
     json_write(style_path, style)
@@ -124,6 +126,8 @@ def full(args: argparse.Namespace) -> int:
         raise ValueError("Pilot approval is absent or belongs to a different PDF")
     if approval.get("style_profile_sha256") != sha256(style_path) or style.get("source_sha256") != source_sha:
         raise ValueError("Locked typography style was modified after approval")
+    if style.get("ocr_backend") != "apple-vision+tesseract":
+        raise ValueError("Pilot approved for a different OCR backend; run a fresh safe pilot")
     local_font = Path(style["font_file"])
     if not local_font.is_file() or sha256(local_font) != style.get("font_file_sha256"):
         raise ValueError("Approved font file changed or is unavailable")
@@ -134,7 +138,7 @@ def full(args: argparse.Namespace) -> int:
     out = args.output or (args.work_dir / "output" / "Book_Full_REVIEW.pdf")
     result = build(args.source, args.work_dir, out, "full", pages,
                    style["font_family"], local_font, style["body_font_size_pt"],
-                   approval=approval_path)
+                   approval=approval_path, fusion_subdir="fusion_safe")
     print(json.dumps({
         "status": result["status"], "source_pages": result["source_page_count"],
         "output_pages": result["output_page_count"],
@@ -155,7 +159,7 @@ def main() -> int:
         p.add_argument("--work-dir", type=Path, required=True)
         if name in ("pilot", "full"):
             p.add_argument("--skip-ocr", action="store_true", help="Reuse already verified OCR/fusion caches (works off-Mac)")
-            p.add_argument("--dpi", type=int, default=230)
+            p.add_argument("--dpi", type=int, default=180)
             p.add_argument("--cpu-threads", type=int, default=2, help="Cap local OCR libraries to a modest number of threads")
         if name == "pilot":
             p.add_argument("--pages", default="auto")
@@ -172,8 +176,8 @@ def main() -> int:
         parser.error("Source PDF not found")
     if hasattr(args, "cpu_threads") and not 1 <= args.cpu_threads <= 8:
         parser.error("--cpu-threads must be 1..8")
-    if hasattr(args, "dpi") and not 120 <= args.dpi <= 300:
-        parser.error("DPI must be 120..300 to bound resource usage")
+    if hasattr(args, "dpi") and not 120 <= args.dpi <= 230:
+        parser.error("Safe OCR DPI must be 120..230 to bound resource usage")
     try:
         return {"pilot": pilot, "approve": approve, "full": full}[args.command](args)
     except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as exc:
