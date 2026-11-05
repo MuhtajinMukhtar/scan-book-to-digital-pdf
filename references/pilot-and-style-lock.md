@@ -4,7 +4,7 @@
 
 ## 1. Inspect, sample, and estimate (without full-book OCR)
 
-Inspect all pages using PDF page count, modest thumbnails and a non-destructive scan-quality survey. Select about **5–8 source pages** drawn from different sections, not just the first five adjacent pages. Include, when present:
+Inspect all pages using PDF page count, modest thumbnails and a non-destructive scan-quality survey. Select **6–8 source pages** for a substantial book, drawn from different sections and recurring layout types, not just adjacent or almost identical body pages. Include, when present:
 
 - Two or more body pages (prefer one early and one late, with different paragraph density)
 - A chapter opener or multi-line heading
@@ -12,13 +12,13 @@ Inspect all pages using PDF page count, modest thumbnails and a non-destructive 
 - A page with a genuine photo or illustration
 - A table, form, diagram or columns if the book contains them
 
-Do not immediately process all candidate pages. **First implement a two-page internal technical/typographic smoke test** (one body and one representative unusual page), compare scan vs actual visible text and verify the two OCR engines and typeset guard. Reuse those results when extending to the rest of the 5–8-page pilot. Use fewer pages for short books. Expand up to 10 only when necessary to show distinct formats and the cost/device budget allows; stop for operator review if local resources or model quota are strained. If a page type has no representative sample, record this as a later exception instead of pretending the sample covers it.
+Do not immediately process all candidate pages. **First run a two-page internal technical/typographic smoke test**. A two-page smoke result **must not trigger user approval**. Then run `python scripts/run_book.py pilot --stage review --source BOOK.pdf --work-dir ./work` to obtain a default **seven-page varied review**; inspect `Source_Review_Candidates.pdf` and `review-selection.json`. The image-derived categories are *heuristic candidates only*: visually confirm actual tables/images/recurring chapter styles and, when wrong, override source physical page numbers via `--pages`. Reuse existing OCR caches when expanding. Use fewer pages only for short books. Expand up to 10 only when necessary to show distinct formats and the cost/device budget allows; stop for operator review if local resources or model quota are strained. If a present page type has no representative sample, revise selection before asking for approval. If the type truly does not occur in the book, record it as absent instead of inventing it.
 
 **Resource gate:** Read `references/resource-budget.md` before any expensive job. Do not run PP-StructureV3 in the safe pipeline or upload all full-resolution pages into the model context. Before user approval, do not OCR/compose/export the whole book. Reading a low-resolution thumbnail or page metadata from all pages *to choose samples* is allowed.
 
-## 2. Run dual OCR only for chosen samples
+## 2. Run Apple Vision on chosen samples; optional Paddle Mobile only for uncertain pages
 
-Prefer `python scripts/run_book.py pilot --source BOOK.pdf --work-dir work --pages N,M` for two representative pages (or omit `--pages` to auto-select). It calls `scripts/mac_selective_ocr.py` with Apple Vision as the main OCR. It scores line confidence and calls no second OCR on clear pages. If source review flags a doubtful page, optionally run PP-OCRv5 Mobile on only that page after permission using `--reuse-apple --enable-mobile`; model download needs separate consent. For additional pages, use a small separate run with the same source/work directory; never run the heavy PP-StructureV3 method automatically.
+Use `python scripts/run_book.py pilot --source BOOK.pdf --work-dir work` for the internal smoke stage, then `python scripts/run_book.py pilot --stage review --source BOOK.pdf --work-dir work` for seven varied source pages (or override with `--pages N,M,...` if source inspection identifies better representatives). It calls `scripts/mac_selective_ocr.py` with Apple Vision as the main OCR. It scores line confidence and calls no second OCR on clear pages. If source review flags a doubtful page, optionally run PP-OCRv5 Mobile on only that page after permission using `--reuse-apple --enable-mobile`; model download needs separate consent. For additional pages, use a small separate run with the same source/work directory; never run the heavy PP-StructureV3 method automatically.
 
 Compare Apple Vision and optional PP-OCRv5 Mobile output in `work/fusion_mobile/`, plus the actual scan image. Mobile is an independent second opinion, not guaranteed equal to the old PP-StructureV3. Review all restored lines, proper names, unusually shaped glyphs, and discrepancies against the original scan. Keep uncertain content visible in a review log.
 
