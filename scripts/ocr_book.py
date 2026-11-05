@@ -100,6 +100,7 @@ def main():
     parser.add_argument("--dpi", type=int, default=230)
     parser.add_argument("--languages", default="id-ID,en-US",
                         help="Comma separated Apple Vision locales, e.g. id-ID,en-US")
+    parser.add_argument("--pages", help="Nonconsecutive 1-based page numbers, e.g. 18,40,74. Avoid OCR of unwanted intermediate pages.")
     parser.add_argument("--start-page", type=int, default=1)
     parser.add_argument("--end-page", type=int)
     parser.add_argument("--replace-cache", action="store_true",
@@ -125,7 +126,17 @@ def main():
         end=args.end_page or len(document)
         if args.start_page < 1 or end > len(document) or end < args.start_page:
             parser.error("Invalid page range")
-        for page_no in range(args.start_page, end+1):
+        if args.pages:
+            try:
+                selected = [int(x.strip()) for x in args.pages.split(",") if x.strip()]
+            except ValueError:
+                parser.error("--pages requires comma-separated integers")
+            if not selected or len(selected) != len(set(selected)) or min(selected) < 1 or max(selected) > len(document):
+                parser.error("Invalid or duplicate --pages values")
+            page_numbers = sorted(selected)
+        else:
+            page_numbers = range(args.start_page, end+1)
+        for page_no in page_numbers:
             target=ocr / f"page_{page_no:03d}.json"
             img=images / f"page_{page_no:03d}.jpg"
             if target.exists() and not args.replace_cache:
