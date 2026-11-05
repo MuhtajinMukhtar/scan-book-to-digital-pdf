@@ -175,7 +175,7 @@ def select_diverse(source: Path, count: int = 7, keep_pages: list[int] | None = 
         for n in to_survey:
             try:
                 features=page_features(doc[n-1])
-                if features["ink_ratio"] < .008 and n not in keep:
+                if total > 30 and features["ink_ratio"] < .008 and n not in keep:
                     continue  # blank/separator, never a representative pilot
             except (ValueError,RuntimeError):
                 continue
