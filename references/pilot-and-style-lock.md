@@ -18,9 +18,9 @@ Do not immediately process all candidate pages. **First implement a two-page int
 
 ## 2. Run dual OCR only for chosen samples
 
-Prefer `python scripts/run_book.py pilot --source BOOK.pdf --work-dir work --pages N,M` for two representative pages (or omit `--pages` to auto-select). It calls `scripts/mac_safe_ocr.py` with Apple Vision + Tesseract once for the selection and caches both results. For additional pages, use a small separate run with the same source/work directory; never run the heavy PP-StructureV3 method automatically.
+Prefer `python scripts/run_book.py pilot --source BOOK.pdf --work-dir work --pages N,M` for two representative pages (or omit `--pages` to auto-select). It calls `scripts/mac_selective_ocr.py` with Apple Vision as the main OCR. It scores line confidence and calls no second OCR on clear pages. If source review flags a doubtful page, optionally run PP-OCRv5 Mobile on only that page after permission using `--reuse-apple --enable-mobile`; model download needs separate consent. For additional pages, use a small separate run with the same source/work directory; never run the heavy PP-StructureV3 method automatically.
 
-Compare Apple Vision and Tesseract output in `work/fusion_safe/`, plus the actual scan image. Tesseract's quality is not guaranteed to match the prior PaddleOCR method. Review all restored lines, proper names, unusually shaped glyphs, and discrepancies against the original scan. Keep uncertain content visible in a review log.
+Compare Apple Vision and optional PP-OCRv5 Mobile output in `work/fusion_mobile/`, plus the actual scan image. Mobile is an independent second opinion, not guaranteed equal to the old PP-StructureV3. Review all restored lines, proper names, unusually shaped glyphs, and discrepancies against the original scan. Keep uncertain content visible in a review log.
 
 ## 3. Build one coherent typography system
 
