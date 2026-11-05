@@ -2,7 +2,7 @@
 """Mac-friendly low-token driver: pilot -> human approval -> full book.
 
 The AI's job is to call this program, review exceptional pages, and present
-the pilot to the user. Apple Vision + Tesseract (not the crash-prone PP-StructureV3) and PDF layout run locally without
+the pilot to the user. Apple Vision primary and optional PP-OCRv5 Mobile review run locally without
 per-page LLM calls. Run --help for controls.
 """
 from __future__ import annotations
@@ -23,17 +23,27 @@ from select_pilot_pages import choose
 HERE = Path(__file__).resolve().parent
 
 
-def run_ocr(source: Path, work: Path, pages: list[int] | None, dpi: int, cpu_threads: int = 2) -> None:
-    cmd = [sys.executable, str(HERE / "mac_safe_ocr.py"), str(source),
-           "--work-dir", str(work), "--dpi", str(dpi)]
-    if pages is not None:
-        cmd += ["--pages", ",".join(str(i) for i in pages)]
+def run_ocr(source: Path, work: Path, pages: list[int], dpi: int,
+            cpu_threads: int = 2, mobile: bool = False,
+            allow_download: bool = False, max_mobile_pages: int = 1,
+            skip_vision: bool = False) -> dict:
+    """Always read with Apple Vision; compare suspicious pages only, if authorized."""
+    cmd = [sys.executable, str(HERE / "mac_selective_ocr.py"), str(source),
+           "--work-dir", str(work), "--dpi", str(dpi),
+           "--pages", ",".join(str(x) for x in pages),
+           "--max-mobile-pages", str(max_mobile_pages)]
+    if mobile:
+        cmd.append("--enable-mobile")
+    if allow_download:
+        cmd.append("--allow-model-download")
+    if skip_vision:
+        cmd.append("--skip-vision")
     env = os.environ.copy()
-    # Safe mode never imports PaddlePaddle. Do not silently switch back to PPStructureV3.
-    # Process-local limits only: do not change Mac system settings.
-    for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
-        env[variable] = str(cpu_threads)
-    subprocess.run(cmd, check=True, env=env)
+    for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+                 "VECLIB_MAXIMUM_THREADS"):
+        env[name] = str(cpu_threads)
+    result = subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
+    return json.loads(result.stdout)
 
 
 def json_write(path: Path, value: dict) -> None:
@@ -52,13 +62,17 @@ def pilot(args: argparse.Namespace) -> int:
             pages = parse_pages(args.pages, len(doc), "pilot")
     if len(pages) < 2:
         raise ValueError("A meaningful typographic pilot requires at least 2 source pages")
+    ocr_summary = None
     if not args.skip_ocr:
-        run_ocr(args.source, args.work_dir, pages, args.dpi, args.cpu_threads)
+        ocr_summary = run_ocr(args.source, args.work_dir, pages, args.dpi,
+                              args.cpu_threads, args.enable_mobile,
+                              args.allow_model_download, args.max_mobile_pages)
     local_font = font_path(args.font_family, args.font_file)
     pilot_dir = args.work_dir / "pilot"
     out = pilot_dir / "Book_Pilot_REVIEW.pdf"
     report = build(args.source, args.work_dir, out, "pilot", pages,
-                   args.font_family, local_font, args.font_size, fusion_subdir="fusion_safe")
+                   args.font_family, local_font, args.font_size,
+                   strict_hybrid=False, fusion_subdir="fusion_mobile")
     comparison(args.source, out, pages, pilot_dir / "Book_Pilot_Comparison.pdf")
     style = {
         "source_sha256": report["source_sha256"],
@@ -68,15 +82,25 @@ def pilot(args: argparse.Namespace) -> int:
         "font_file": str(local_font.resolve()),
         "font_file_sha256": sha256(local_font),
         "body_font_size_pt": report["body_font_size_pt"],
-        "engine_version": 2,
-        "ocr_backend": "apple-vision+tesseract",
+        "engine_version": 3,
+        "ocr_backend": "apple-vision-primary+paddle-mobile-selective",
     }
     style_path = pilot_dir / "style-profile.json"
     json_write(style_path, style)
     needs_more = report["digital_pages"] < 2
+    if ocr_summary is None:
+        previous = args.work_dir / "review" / "SUMMARY.json"
+        if previous.exists():
+            ocr_summary = json.loads(previous.read_text(encoding="utf-8"))
+    pending = (ocr_summary or {}).get("secondary_pending_pages", [])
     summary = {
-        "status": "PILOT_INCOMPLETE" if needs_more else "PILOT_AWAITING_APPROVAL",
+        "status": ("PILOT_INCOMPLETE" if needs_more else
+                   "PILOT_NEEDS_OCR_REVIEW" if pending else
+                   "PILOT_AWAITING_APPROVAL"),
         "digital_sample_pages": report["digital_pages"],
+        "ocr_primary": "apple-vision", "ocr_secondary": "paddle-ppocrv5-mobile-only-if-needed",
+        "secondary_pending_pages": pending,
+        "secondary_pending_reasons": (ocr_summary or {}).get("secondary_pending_reasons", {}),
         "fallback_sample_pages": report["fallback_pages"],
         "style_profile_sha256": sha256(style_path),
         "pilot_pdf": str(out), "comparison_pdf": str(pilot_dir / "Book_Pilot_Comparison.pdf"),
@@ -126,25 +150,29 @@ def full(args: argparse.Namespace) -> int:
         raise ValueError("Pilot approval is absent or belongs to a different PDF")
     if approval.get("style_profile_sha256") != sha256(style_path) or style.get("source_sha256") != source_sha:
         raise ValueError("Locked typography style was modified after approval")
-    if style.get("ocr_backend") != "apple-vision+tesseract":
+    if style.get("ocr_backend") != "apple-vision-primary+paddle-mobile-selective":
         raise ValueError("Pilot approved for a different OCR backend; run a fresh safe pilot")
     local_font = Path(style["font_file"])
     if not local_font.is_file() or sha256(local_font) != style.get("font_file_sha256"):
         raise ValueError("Approved font file changed or is unavailable")
-    if not args.skip_ocr:
-        run_ocr(args.source, args.work_dir, None, args.dpi, args.cpu_threads)
     with fitz.open(args.source) as src:
         pages = list(range(1, len(src)+1))
+    ocr_summary = None
+    if not args.skip_ocr:
+        ocr_summary = run_ocr(args.source, args.work_dir, pages, args.dpi,
+                              args.cpu_threads, args.enable_mobile,
+                              args.allow_model_download, args.max_mobile_pages)
     out = args.output or (args.work_dir / "output" / "Book_Full_REVIEW.pdf")
     result = build(args.source, args.work_dir, out, "full", pages,
                    style["font_family"], local_font, style["body_font_size_pt"],
-                   approval=approval_path, fusion_subdir="fusion_safe")
+                   approval=approval_path, strict_hybrid=False, fusion_subdir="fusion_mobile")
     print(json.dumps({
         "status": result["status"], "source_pages": result["source_page_count"],
         "output_pages": result["output_page_count"],
         "digitally_typeset_pages": result["digital_pages"],
         "searchable_scan_fallback_pages": result["fallback_pages"],
         "needs_editorial_review": True,
+        "secondary_pending_pages": (ocr_summary or {}).get("secondary_pending_pages", []),
         "pdf": str(out),
     }, ensure_ascii=False, indent=2))
     return 0
@@ -160,7 +188,14 @@ def main() -> int:
         if name in ("pilot", "full"):
             p.add_argument("--skip-ocr", action="store_true", help="Reuse already verified OCR/fusion caches (works off-Mac)")
             p.add_argument("--dpi", type=int, default=180)
-            p.add_argument("--cpu-threads", type=int, default=2, help="Cap local OCR libraries to a modest number of threads")
+            p.add_argument("--cpu-threads", type=int, default=2,
+                           help="Bound local OCR thread count")
+            p.add_argument("--enable-mobile", action="store_true",
+                           help="Explicit user opt-in: selectively run PP-OCRv5 Mobile only")
+            p.add_argument("--allow-model-download", action="store_true",
+                           help="Separate user consent to download lightweight Mobile models")
+            p.add_argument("--max-mobile-pages", type=int, default=1,
+                           help="Hard cap on additional Mobile OCR pages per run")
         if name == "pilot":
             p.add_argument("--pages", default="auto")
             p.add_argument("--font-family", choices=["serif", "sans"], default="sans")
@@ -174,6 +209,10 @@ def main() -> int:
     args = parser.parse_args()
     if not args.source.is_file():
         parser.error("Source PDF not found")
+    if hasattr(args, "max_mobile_pages") and not 0 <= args.max_mobile_pages <= 5:
+        parser.error("--max-mobile-pages must be 0..5")
+    if hasattr(args, "allow_model_download") and args.allow_model_download and not args.enable_mobile:
+        parser.error("--allow-model-download requires --enable-mobile")
     if hasattr(args, "cpu_threads") and not 1 <= args.cpu_threads <= 8:
         parser.error("--cpu-threads must be 1..8")
     if hasattr(args, "dpi") and not 120 <= args.dpi <= 230:
