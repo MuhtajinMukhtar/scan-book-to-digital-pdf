@@ -8,7 +8,7 @@ Ubah PDF buku hasil scan menjadi **PDF digital dengan teks nyata yang dapat dipi
 
 https://github.com/MuhtajinMukhtar/scan-book-to-digital-pdf
 
-AI akan membuat **contoh dua halaman terlebih dahulu**, menunjukkan perbandingannya dengan scan, lalu meminta persetujuan sebelum mengerjakan semua halaman. Anda tidak perlu memahami istilah OCR, font embedding atau command line.
+AI melakukan **uji internal 2 halaman**, lalu menyiapkan **pilot 6–8 halaman yang berbeda karakter** dari bagian buku yang berlainan, baru meminta persetujuan untuk seluruh buku. Contoh dapat mencakup teks biasa, judul bab, kutipan/cetak miring, foto/ilustrasi, tabel/formulir, dan profil—**jika memang ada pada sumber**. Pengguna tidak perlu memilih halaman atau memahami OCR.
 
 ## Alur utama sekarang
 
@@ -29,7 +29,15 @@ Baca [SKILL.md](SKILL.md) dan [panduan Mac](references/mac-setup.md). Sesudah se
 python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work
 ```
 
-Hasil awal: `work/pilot/Book_Pilot_REVIEW.pdf`, `Book_Pilot_Comparison.pdf`, `pilot-status.json`. Jika skor Apple Vision menyarankan pemeriksaan tambahan, lakukan itu **hanya setelah persetujuan untuk Mobile/install/model download**:
+Hasil ini **hanya smoke test internal**, bukan pilot yang boleh di-approve. Agen kemudian memilih dan memproses sumber yang lebih beragam secara bertahap:
+
+```sh
+python scripts/run_book.py pilot --stage review --source "/path/to/book.pdf" --work-dir ./work
+```
+
+Lihat `work/pilot/Source_Review_Candidates.pdf` dan `review-selection.json`, periksa bahwa **jenis halaman memang berbeda dan mewakili pola yang berulang**. Kategori yang diprediksi dari thumbnail adalah kandidat, bukan bukti; agen harus memeriksa gambarnya. Jika kurang tepat, agen dapat mengganti dengan `--pages` berisi nomor halaman fisik PDF. OCR yang sudah disimpan tidak diproses ulang.
+
+Hasil yang ditinjau: `work/pilot/Book_Pilot_REVIEW.pdf`, `Book_Pilot_Comparison.pdf`, `pilot-status.json`. Jika skor Apple Vision menyarankan pemeriksaan tambahan, lakukan itu **hanya setelah persetujuan untuk Mobile/install/model download**:
 
 ```sh
 python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work --reuse-apple --enable-mobile --allow-model-download
@@ -43,7 +51,7 @@ Untuk perbaikan layout/font saja, tanpa OCR ulang sama sekali:
 python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work --skip-ocr
 ```
 
-**Hanya setelah contoh digital disetujui pengguna:**
+**Hanya setelah pilot 6–8 halaman yang mewakili berbagai jenis layout disetujui pengguna:**
 
 ```sh
 python scripts/run_book.py approve --source "/path/to/book.pdf" --work-dir ./work --confirm APPROVE_PILOT
