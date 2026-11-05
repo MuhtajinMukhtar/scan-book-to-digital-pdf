@@ -41,7 +41,11 @@ Use visual evidence to **approximate** scanned fonts; exact face identity may be
 
 Store the source image references and a machine-readable **`work/pilot/style-profile.json`** with font names, sizes, paragraph/leading rules, layout geometry, page samples, source hash, and revision number. Do not include proprietary font files in public or shared deliverables.
 
-## 4. Generate a real visual pilot
+## 4. Guarantee fixed pages in the pilot
+
+Render every pilot sample within an individual frame having the exact source page dimensions. A selected source page must not split into two outputs or borrow space from its neighbor. If its text cannot fit at the approved font size/line spacing, change only source-evidenced layout spacing within the requested style, or present a **searchable-scan fallback of that same page** and ask the user what to prioritize. Do **not** shrink text silently, crop, omit, or move any lines to the following page. Compare the start and end of each sampled source page with the corresponding pilot page and inspect the last paragraph/line visually.
+
+## 5. Generate a real visual pilot
 
 Generate **`<Book>_Pilot_v1_REVIEW.pdf`** (only selected source pages, each tagged with its original physical page number) and **`<Book>_Pilot_Comparison.pdf`** with source scan/result side by side or an equivalent clearly labeled comparison. Render and inspect: text accuracy and completeness, alignment, spacing, page density, title hierarchy, paragraph indents, image preservation, font consistency, and no overflow.
 
@@ -49,7 +53,7 @@ Check *digital text* is selectable (not merely an image with invisible OCR layer
 
 Keep explanations short: **"Ini contoh beberapa halaman dari bagian berbeda. Apakah huruf, ukurannya, dan tata letaknya sudah cocok? Jika cocok, saya lanjutkan semuanya."**
 
-## 5. Approval and revisions
+## 6. Approval and revisions
 
 Status starts **`PILOT_AWAITING_APPROVAL`**. The user may answer:
 - **"Cocok, lanjutkan."** = explicit approval of the current pilot version/style profile (assuming no unresolved blocking QA).
@@ -60,7 +64,7 @@ Record the approval with the exact pilot version, source SHA, style-profile SHA 
 
 Only after approval: set status **`PILOT_APPROVED`**, use the frozen profile for all ordinary pages, reuse OCR caches, and process the remaining pages. Newly encountered layouts can get additional style-role rules without silently changing the agreed body family/size/spacing. If an unavoidable change substantially alters the accepted style, show a focused sample and request approval for that exception.
 
-## 6. Full-book consistency QA
+## 7. Full-book consistency QA
 
 Before final delivery, audit:
 - Page-by-page same **body family, size and leading**, apart from documented intentional exceptions.
@@ -70,3 +74,5 @@ Before final delivery, audit:
 - Source page mapping and untouched original hash remain verified.
 
 The whole-book PDF is a **REVIEW** until final editorial acceptance. A pilot approval authorizes the full conversion; it **does not** waive final content or layout QA.
+
+**Full-book hard gate:** every output page N must match source page N in page-specific content, not just overall word totals. Run `scripts/page_fidelity_audit.py` with complete OCR and manifest; see `references/page-fidelity.md`. A sample approval authorizes full processing but does not permit overflow or skipped pages.
