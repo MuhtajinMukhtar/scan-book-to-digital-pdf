@@ -86,7 +86,18 @@ def plan_body(body: list[dict], width: float, height: float, font_size: float) -
         text_lengths = [len(str(item.get("text", "")).strip()) for item in group]
         prose = len(group) >= 3 and sum(n >= 22 for n in text_lengths) >= 2
         anchor, support = _dominant_left(xs, font_size)
-        consensus = prose and support >= max(2, (len(xs) + 1) // 2)
+        # A centred multi-line quote/title often has different left edges
+        # precisely because the widths differ. Respect that source geometry.
+        centers = [(x + float(item["width"]) * width / 2)
+                   for x, item in zip(xs, group)]
+        likely_centered = (
+            max(xs) - min(xs) > font_size * 1.10
+            and max(centers) - min(centers) < font_size * .8
+        )
+        consensus = (
+            prose and not likely_centered
+            and support >= max(2, (len(xs) + 1) // 2)
+        )
 
         for j, item in enumerate(group):
             source_x = xs[j]
