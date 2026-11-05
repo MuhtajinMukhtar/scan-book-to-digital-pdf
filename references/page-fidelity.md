@@ -16,7 +16,7 @@ For a requested **same-pages** digital reconstruction, the source is authoritati
 ## Audit sources and limits
 
 - The `--source` file is the **actual original scanned PDF**, not a previous digital output.
-- The `--source-ocr-dir` must have a **page_i.json for each source physical page**, with correct `page`, `source_sha256`, and `lines[].text`. Its primary role is the Apple Vision OCR text cache; **check and reconcile uncertain lines against PaddleOCR PP-StructureV3 raw `rec_texts` and the scan**.
+- The `--source-ocr-dir` must have a **page_i.json for each source physical page**, with correct `page`, `source_sha256`, and `lines[].text`. Use `work/verified_ocr`: assemble a **source-verified text reference** using Apple Vision, PaddleOCR PP-StructureV3 raw `rec_texts`, **and the actual scan**. The program is intentionally not a substitute for this reconciliation. Retain `work/ocr` unmodified as raw Apple OCR. All verified lines must remain assigned to the physical page where they appear, including material that was missing from either engine. Do not forge verification flags.
 - The full PDF may be typeset but its page count, geometry, and text still have to match the original *per page*. Extraction from a PDF can miss visually present or clipped text, so it is not a substitute for reading source and output page images.
 - The comparison is intentionally **fail-closed**: missing caches, mismatching hashes, omitted/duplicated page manifests, unexplained extra or missing words, missing review flags, and likely cross-page movement force `FAIL_REVIEW_REQUIRED`. A full-book 95% coverage percentage **cannot** certify all individual pages.
 - Exact token comparisons can flag legitimate OCR corrections, ligatures and differences in punctuation; inspect those against the scan, then document exact token-by-token source-verified exceptions instead of lowering thresholds. Never accept an exception based solely on AI guesses.
@@ -64,7 +64,7 @@ The example is **schema only**: all flags start false/unverified in a new book a
 python scripts/page_fidelity_audit.py \
   --source original-scan.pdf \
   --output Digital_REVIEW.pdf \
-  --source-ocr-dir work/ocr \
+  --source-ocr-dir work/verified_ocr \
   --manifest manifest.json \
   --json page-fidelity.json
 ```
