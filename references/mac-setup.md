@@ -1,12 +1,40 @@
-# Mac setup for AI agents (not for nontechnical users)
+# Setup Mac yang ringan (untuk AI Agent, bukan pengguna nonteknis)
 
-Use an authorized Mac (Apple Silicon is fine if the installed PaddlePaddle wheel supports its OS/Python version). Use a fresh virtual environment, local book working directory, and no changes to system Python or global packages. Do not run on a shared production server.
+## Tujuan
 
-1. Check `python3 --version`, `swiftc --version`, available disk space and CPU/memory. Prefer a supported Python 3.10–3.12 available for both Apple Vision Swift helper and PaddleOCR. Do not overwrite other environments.
-2. Create `.venv` and install `requirements.txt`, plus the documented PaddlePaddle inference engine and `paddleocr[doc-parser]` 3.x in that venv. Verify `import paddle`, `from paddleocr import PPStructureV3`, and `import fitz, PIL`. PaddlePaddle wheel compatibility differs between macOS/Python versions: consult the **official installation instructions** and stop if no supported Mac wheel is available; do not force unsupported binary installations. Official docs: https://www.paddleocr.ai/main/en/version3.x/installation.html and https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/PP-StructureV3.html
-3. Run a **one-page technical test** of both OCR engines. PP-StructureV3 may download models on first run: obtain permission for any downloads and keep cache in a local user-owned environment. Then follow the **5–8-page editorial pilot and explicit approval gate** in `references/pilot-and-style-lock.md`. The technical one-page test is not approval for the entire book.
-4. Before pilot approval, invoke `python scripts/mac_hybrid_ocr.py "input.pdf" --work-dir ./work --start-page N --end-page N` for each selected pilot source page. Invoke the **full-book** command `python scripts/mac_hybrid_ocr.py "input.pdf" --work-dir ./work` only after approval of the specific pilot. The script calls Apple Vision and PP-StructureV3 on the same rendered images. To resume, rerun unchanged command; checksum guards prevent accidental cache reuse across different inputs.
-5. Inspect `work/fusion/OCR_REVIEW.json` and each page report. Carefully inspect `paddle_raw_not_in_markdown` as well as cross-engine disagreements. Read raw Paddle `overall_ocr_res.rec_texts` **rather than** treating Markdown or the report as authoritative text.
-6. If installation or model inference fails, report the **real error** and do not pretend both engines ran. Only use a single-engine alternative with the user's informed approval; label the lower-evidence QA accordingly.
+Menggunakan **Apple Vision + Tesseract** untuk membandingkan hasil pengenalan teks tanpa PP-StructureV3. Pipeline yang lama berhasil pada eksperimen lain tetapi pernah mencapai penggunaan RAM sekitar 15 GB dan mengalami **segmentation fault** saat dicoba kembali di Mac. Jangan mengulang crash atau memindahkan beban berat itu ke Ubuntu kecil.
 
-The OCR comparison utility emits candidate issues. It does not magically correct text, typeset the final PDF, or prove the output matches the original scan. Source-review and final PDF QA are separate gates.
+## Prasyarat
+
+- macOS dan `swiftc` (Xcode Command Line Tools) untuk Apple Vision.
+- Python 3.10+ di virtual environment yang diizinkan. `pip install -r requirements.txt` berisi PyMuPDF dan Pillow saja.
+- `tesseract` CLI, serta paket bahasa `eng` dan `ind`. Periksa `tesseract --list-langs`. Tidak boleh diam-diam memakai bahasa Inggris saja untuk buku Bahasa Indonesia.
+- Jika perlu instalasi, **minta izin pengguna terlebih dahulu**. Untuk Mac yang memakai Homebrew, paket resminya tersedia melalui `brew install tesseract tesseract-lang`. Jangan mengubah global Python atau memasang model PaddlePaddle demi menjalankan pilot aman.
+
+Referensi:
+- https://formulae.brew.sh/formula/tesseract
+- https://formulae.brew.sh/formula/tesseract-lang
+- https://tesseract-ocr.github.io/tessdoc/Installation.html
+
+## Penggunaan
+
+Cek dulu bahwa PDF sumber, Mac, ruang disk, RAM, dan versi Python sesuai. Setelah dependensi tersedia:
+
+```sh
+python scripts/run_book.py pilot --source "buku.pdf" --work-dir ./work
+```
+
+Program memilih dua halaman teks dari thumbnail, menggunakan Apple Vision dan Tesseract di halaman itu saja, memakai cache untuk menghindari pemrosesan ulang, dan membuat contoh PDF digital. Secara default DPI dibatasi 180 dan jumlah thread library OCR 2 (tidak mengubah pengaturan sistem).
+
+Jika cache Apple Vision dari sesi sebelumnya tersedia pada folder `work/ocr`, **jangan hapus**. Pembanding Tesseract disimpan terpisah pada `work/tesseract`; perbandingan berada di `work/fusion_safe`. Berkas lawas PaddleOCR tidak ditimpa.
+
+**Hanya setelah menyetujui contoh** agen boleh mencatat persetujuan lalu memulai seluruh buku. Kecepatan/kualitas masih harus diuji pada Mac nyata. Keluaran tetap REVIEW, bukan FINAL.
+
+## Jika mesin tidak tersedia atau gagal
+
+- `tesseract` tidak tersedia / bahasa `ind` belum terpasang: berhenti aman, tampilkan satu langkah meminta izin instalasi; jangan memaksa Apple Vision saja sambil melabeli hasil "dual OCR".
+- `swiftc` tidak tersedia: minta izin menyiapkan Apple Command Line Tools atau laporkan batasan; jangan mengaku memakai Apple Vision di Linux.
+- Mac mulai panas/lambat, atau Work/Codex kuota terkuras: hentikan batch, simpan cache, jangan ulang OCR.
+- Segmentation fault atau penggunaan RAM besar oleh PaddlePaddle: **jangan coba lagi pipeline tersebut**. PP-StructureV3 hanya eksperimen opsional, dengan `--ack-heavy-ppstructure` untuk lingkungan yang sudah diuji terpisah. Kinerja PaddleOCR tidak dapat diasumsikan sama dengan Tesseract.
+
+Skrip dan status hasil harus memberi bukti mesin yang benar-benar digunakan; jangan mengarang proses yang tidak dijalankan.
