@@ -49,7 +49,7 @@ class DigitalStylesTests(unittest.TestCase):
         self.assertGreater(len(page.get_texttrace()),10)
         styles={span["font"] for block in page.get_text("dict")["blocks"]
                 if block["type"]==0 for line in block["lines"] for span in line["spans"]}
-        self.assertTrue(any("Italic" in name for name in styles),styles)
+        self.assertTrue(any(("Italic" in name or "Oblique" in name) for name in styles),styles)
         footer_words=[w for w in page.get_text("words") if w[4]=="93"]
         self.assertTrue(any(w[1]>560 for w in footer_words),footer_words)
         out.close();source.close()
