@@ -8,6 +8,9 @@ from __future__ import annotations
 import re
 import statistics
 
+# Changing paragraph placement invalidates approval of prior pilot layouts.
+LAYOUT_REVISION = 4
+
 def footer_number(item: dict) -> bool:
     text = str(item.get("text", "")).strip()
     return bool(
