@@ -10,7 +10,9 @@ Ubah **PDF buku hasil scan** menjadi buku digital yang lebih nyaman dibaca. Teks
 
 > **Tolong ubah PDF buku ini menjadi buku digital yang nyaman dibaca. Ikuti panduan https://github.com/MuhtajinMukhtar/scan-book-to-digital-pdf dan bimbing saya dengan pilihan sederhana.**
 
-**3.** Jawab pertanyaan ringan dari AI hanya jika diperlukan: model huruf seperti buku atau modern, besar huruf, dan apakah paragraf menjorok. Bisa jawab **"ikuti aslinya saja"**.
+**3.** AI membuat **contoh 5–8 halaman** dengan berbagai bentuk halaman dalam buku, dengan jenis, ukuran, dan gaya tulisan semirip mungkin dengan sumber. Anda boleh menjawab **"ikuti aslinya saja"** untuk pengaturan huruf.
+
+**4.** Lihat PDF contoh dan jawab **"Cocok, lanjutkan"** atau **"Perbaiki bagian ini"**. **AI baru mengerjakan seluruh halaman setelah contoh disetujui.**
 
 Anda tidak perlu memahami istilah OCR, PaddleOCR, program, atau terminal.
 
@@ -18,11 +20,13 @@ Anda tidak perlu memahami istilah OCR, PaddleOCR, program, atau terminal.
 
 Di Mac, alur yang disarankan memakai **Apple Vision + PaddleOCR PP-StructureV3**. Keduanya membaca halaman yang sama, kemudian AI membandingkan hasilnya dengan gambar asli dan memeriksa bagian yang hilang atau salah. Hasil perbandingan tidak otomatis dianggap benar: nama orang, kata sulit, tabel dan halaman bergambar tetap harus diperiksa. PDF asli tidak boleh ditimpa.
 
+**Tahap wajib:** pilih beberapa halaman dari bagian berbeda, bangun aturan huruf/ukuran/spasi/indentasi yang konsisten, buat PDF contoh, minta persetujuan, lalu gunakan aturan yang sudah disepakati untuk seluruh buku. Hasilnya tetap diperiksa halaman demi halaman. Panduan detail: [pilot dan konsistensi gaya](references/pilot-and-style-lock.md).
+
 Program dalam repo menyiapkan OCR gabungan dan laporan pemeriksaan; **menata ulang setiap jenis halaman buku masih membutuhkan kerja editorial oleh AI**. Jadi kualitas setara sebuah hasil buku yang pernah dikerjakan tetap harus diuji pada buku baru, bukan dijanjikan tanpa pemeriksaan.
 
 ## Untuk AI agent / pengguna teknis
 
-Mulai dari [`SKILL.md`](SKILL.md). Setup yang aman untuk Mac ada di [`references/mac-setup.md`](references/mac-setup.md). Jalankan OCR gabungan sesudah instalasi di lingkungan terpisah:
+Mulai dari [`SKILL.md`](SKILL.md). Setup yang aman untuk Mac ada di [`references/mac-setup.md`](references/mac-setup.md). Jalankan OCR gabungan **hanya untuk halaman percontohan terlebih dahulu** sesudah instalasi di lingkungan terpisah (halaman berikut hanya contoh; AI memilih sendiri yang paling mewakili isi buku):
 
 ```sh
 python scripts/mac_hybrid_ocr.py /path/to/book.pdf --work-dir ./work --start-page 1 --end-page 5
@@ -36,7 +40,7 @@ Untuk memeriksa hasil yang ada tanpa menjalankan ulang OCR:
 python scripts/mac_hybrid_ocr.py --work-dir ./work --compare-only
 ```
 
-Setelah agen merekonstruksi dan menghasilkan PDF digital, gunakan `scripts/pdf_audit.py`, pemeriksaan visual terhadap scan, serta manifest per halaman. File PDF hasil tetap berstatus **REVIEW** sampai disetujui.
+**Jangan menjalankan seluruh buku sebelum pengguna menyetujui contoh PDF.** Sesudah persetujuan, agen melanjutkan OCR dan rekontruksi seluruh halaman dengan gaya tulisan yang dikunci dari pilot. Setelah agen merekonstruksi dan menghasilkan PDF digital, gunakan `scripts/pdf_audit.py`, pemeriksaan visual terhadap scan, serta manifest per halaman. File PDF hasil tetap berstatus **REVIEW** sampai disetujui.
 
 **Tanggung jawab:** Pastikan Anda berhak memproses buku. Jangan mengunggah salinan buku berhak cipta, dokumen pribadi, cache OCR buku, atau berkas font berlisensi ke repo publik. Repo ini menyediakan kode dan panduan, bukan berkas buku.
 
