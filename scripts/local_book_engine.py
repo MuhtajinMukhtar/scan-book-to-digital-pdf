@@ -231,6 +231,12 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         evidence = json.loads(approval.read_text(encoding="utf-8"))
         if evidence.get("source_sha256") != source_sha or evidence.get("decision") != "PILOT_APPROVED":
             raise ValueError("Approval is missing, invalid, or for another scanned book")
+        style_file = work / "pilot" / "style-profile.json"
+        if not style_file.is_file() or evidence.get("style_profile_sha256") != sha256(style_file):
+            raise ValueError("Approval does not match frozen pilot typography profile")
+        style = json.loads(style_file.read_text(encoding="utf-8"))
+        if style.get("body_font_size_pt") != font_size or style.get("font_file_sha256") != sha256(fontfile):
+            raise ValueError("Body font or font size changed after pilot approval")
     doc = fitz.open(source)
     if mode == "full" and page_list != list(range(1, len(doc)+1)):
         raise ValueError("Cannot publish incomplete full-book page mapping")
