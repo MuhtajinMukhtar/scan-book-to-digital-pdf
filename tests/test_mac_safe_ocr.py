@@ -51,5 +51,46 @@ class SafeOCRTests(unittest.TestCase):
         self.assertNotIn("import paddle",src)
         self.assertIn("fusion_safe",src)
 
+
+    def test_cache_reuse_and_legacy_paddle_results_not_overwritten(self):
+        import fitz
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            source = root / "book.pdf"
+            book = fitz.open()
+            book.new_page(width=300, height=400)
+            book.save(source)
+            book.close()
+            work = root / "work"
+            (work / "ocr").mkdir(parents=True)
+            (work / "page_images").mkdir(parents=True)
+            (work / "fusion").mkdir(parents=True)
+            Image.new("RGB", (300, 400), "white").save(
+                work / "page_images" / "page_001.jpg"
+            )
+            source_hash = safe.digest(source)
+            lines = [{"text": "A complete sample sentence."}]
+            (work / "ocr" / "page_001.json").write_text(json.dumps({
+                "page": 1, "engine": "apple-vision",
+                "source_sha256": source_hash, "lines": lines
+            }))
+            old = work / "fusion" / "page_001.json"
+            old.write_text('{"engine":"legacy-paddle"}')
+            with (patch.object(safe.platform, "system", return_value="Darwin"),
+                  patch.object(safe, "installed_languages", return_value={"ind","eng"}),
+                  patch.object(safe.subprocess, "run") as apple_ran,
+                  patch.object(safe, "recognize_tesseract", return_value=lines) as tess):
+                first = safe.run(source, work, [1], 180, "ind+eng")
+                second = safe.run(source, work, [1], 180, "ind+eng")
+            self.assertEqual(first["new_secondary_pages"], 1)
+            self.assertEqual(second["cached_secondary_pages"], 1)
+            self.assertEqual(tess.call_count, 1)
+            self.assertEqual(apple_ran.call_count, 2)
+            self.assertEqual(json.loads(old.read_text())["engine"], "legacy-paddle")
+            self.assertEqual(json.loads(
+                (work/"fusion_safe"/"page_001.json").read_text()
+            )["secondary_engine"], "tesseract")
+
 if __name__=="__main__":
     unittest.main()
