@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -22,12 +23,16 @@ from select_pilot_pages import choose
 HERE = Path(__file__).resolve().parent
 
 
-def run_ocr(source: Path, work: Path, pages: list[int] | None, dpi: int) -> None:
+def run_ocr(source: Path, work: Path, pages: list[int] | None, dpi: int, cpu_threads: int = 2) -> None:
     cmd = [sys.executable, str(HERE / "mac_hybrid_ocr.py"), str(source),
            "--work-dir", str(work), "--dpi", str(dpi)]
     if pages is not None:
         cmd += ["--pages", ",".join(str(i) for i in pages)]
-    subprocess.run(cmd, check=True)
+    env = os.environ.copy()
+    # Process-local limits only: do not change Mac system settings.
+    for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+        env[variable] = str(cpu_threads)
+    subprocess.run(cmd, check=True, env=env)
 
 
 def json_write(path: Path, value: dict) -> None:
@@ -47,7 +52,7 @@ def pilot(args: argparse.Namespace) -> int:
     if len(pages) < 2:
         raise ValueError("A meaningful typographic pilot requires at least 2 source pages")
     if not args.skip_ocr:
-        run_ocr(args.source, args.work_dir, pages, args.dpi)
+        run_ocr(args.source, args.work_dir, pages, args.dpi, args.cpu_threads)
     local_font = font_path(args.font_family, args.font_file)
     pilot_dir = args.work_dir / "pilot"
     out = pilot_dir / "Book_Pilot_REVIEW.pdf"
@@ -123,7 +128,7 @@ def full(args: argparse.Namespace) -> int:
     if not local_font.is_file() or sha256(local_font) != style.get("font_file_sha256"):
         raise ValueError("Approved font file changed or is unavailable")
     if not args.skip_ocr:
-        run_ocr(args.source, args.work_dir, None, args.dpi)
+        run_ocr(args.source, args.work_dir, None, args.dpi, args.cpu_threads)
     with fitz.open(args.source) as src:
         pages = list(range(1, len(src)+1))
     out = args.output or (args.work_dir / "output" / "Book_Full_REVIEW.pdf")
@@ -151,6 +156,7 @@ def main() -> int:
         if name in ("pilot", "full"):
             p.add_argument("--skip-ocr", action="store_true", help="Reuse already verified OCR/fusion caches (works off-Mac)")
             p.add_argument("--dpi", type=int, default=230)
+            p.add_argument("--cpu-threads", type=int, default=2, help="Cap local OCR libraries to a modest number of threads")
         if name == "pilot":
             p.add_argument("--pages", default="auto")
             p.add_argument("--font-family", choices=["serif", "sans"], default="sans")
@@ -164,6 +170,8 @@ def main() -> int:
     args = parser.parse_args()
     if not args.source.is_file():
         parser.error("Source PDF not found")
+    if hasattr(args, "cpu_threads") and not 1 <= args.cpu_threads <= 8:
+        parser.error("--cpu-threads must be 1..8")
     if hasattr(args, "dpi") and not 120 <= args.dpi <= 300:
         parser.error("DPI must be 120..300 to bound resource usage")
     try:
