@@ -12,9 +12,9 @@ Inspect all pages using PDF page count, modest thumbnails and a non-destructive 
 - A page with a genuine photo or illustration
 - A table, form, diagram or columns if the book contains them
 
-Use fewer pages for short books. Expand up to 10 when needed to show distinct formats. If a page type has no representative sample, record this as a later exception instead of pretending the sample covers it.
+Do not immediately process all candidate pages. **First implement a two-page internal technical/typographic smoke test** (one body and one representative unusual page), compare scan vs actual visible text and verify the two OCR engines and typeset guard. Reuse those results when extending to the rest of the 5–8-page pilot. Use fewer pages for short books. Expand up to 10 only when necessary to show distinct formats and the cost/device budget allows; stop for operator review if local resources or model quota are strained. If a page type has no representative sample, record this as a later exception instead of pretending the sample covers it.
 
-**Resource gate:** Before user approval, do not OCR/compose/export the whole book. Reading a low-resolution thumbnail or page metadata from all pages *to choose samples* is allowed.
+**Resource gate:** Read `references/resource-budget.md` before any expensive job. Do not repeatedly run PaddleOCR or upload all full-resolution pages into the model context. Before user approval, do not OCR/compose/export the whole book. Reading a low-resolution thumbnail or page metadata from all pages *to choose samples* is allowed.
 
 ## 2. Run dual OCR only for chosen samples
 
