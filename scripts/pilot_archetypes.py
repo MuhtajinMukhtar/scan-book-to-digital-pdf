@@ -139,10 +139,17 @@ def role_scores(m: dict, number: int, total: int) -> dict:
                    - max(0,heavy-19)*3.8)
     illustration_score = (2.0*heavy + ink*50 - hlines*2-vlines*2
                           - max(0,ink-.33)*250
-                          - max(0,heavy-34)*3)
-    chapter_score = top*65 + max(0,30-groups)*1.1 + min(6,heavy)*.5
+                          - max(0,heavy-34)*3
+                          - max(0,groups-30)*1.6)
+    # Do not treat a nearly solid colored quotation panel as a chapter
+    # opener, or select two visually similar colored panels for two roles.
+    chapter_score = (top*65 + max(0,30-groups)*1.1 + min(6,heavy)*.5
+                     - max(0,ink-.36)*160
+                     - max(0,heavy-30)*1.5)
     mixed_score = 17 - abs(groups-20)*.55 + heavy*.85 + hlines*.7
-    sparse_score = 40-max(0,groups-12)*1.2+top*12+min(6,heavy)*.4
+    sparse_score = (40-max(0,groups-12)*1.2+top*12+min(6,heavy)*.4
+                    - max(0,ink-.38)*100
+                    - max(0,heavy-35)*1.8)
     return {
         "body_early":text_score+(5 if number<total*.50 else -12),
         "body_late":text_score+(5 if number>total*.50 else -12),
