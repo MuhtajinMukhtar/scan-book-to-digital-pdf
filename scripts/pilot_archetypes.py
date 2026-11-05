@@ -129,7 +129,8 @@ def select_diverse(source: Path, count: int = 7, keep_pages: list[int] | None = 
         if any(x<1 or x>total for x in keep) or len(keep)>count:
             raise ValueError("Invalid smoke-test pages")
         candidates=[]
-        for n in survey_numbers(total):
+        # Always survey cached smoke pages even when uniform sampling skips them.
+        for n in sorted(set(survey_numbers(total)) | set(keep)):
             try:
                 features=page_features(doc[n-1])
             except (ValueError,RuntimeError):
