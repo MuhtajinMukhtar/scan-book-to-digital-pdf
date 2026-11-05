@@ -14,7 +14,7 @@ When the user attaches a scanned book and this repo link, proceed with the workf
 - **Primary:** Apple Vision for every processed page, cached in `work/ocr/page_###.json`. This was the successful starting point of the original Mac book experiment.
 - **Secondary (selective only):** `PP-OCRv5_mobile_det` + `PP-OCRv5_mobile_rec` via `PaddleOCR`, on *uncertain source pages* only. Not PP-StructureV3, not Tesseract by default. Never infer that PaddleOCR Mobile has the same accuracy as the previous PP-StructureV3 pilot.
 - **Light-Mac safety:** process one Mobile page at a time in a monitored child process, with RAM/time limits and small inputs. Skip mobile when no doubt is detected. A model must never be downloaded without permission. If Mobile fails, keep Apple results and flag the page for source review; no automatic expensive retry.
-- **Typesetting:** deterministic engine composes visible PDF text from source page geometry and a locked font choice; illustrated/table/uncertain layouts may need reviewed searchable-scan fallback. The current engine does not fully reproduce all italics, images, paragraph shapes or decorative layouts automatically. Never claim that it does.
+- **Typesetting:** every **non-cover page containing text** must have visible, selectable, genuinely typeset PDF text. An original full-page scan with hidden OCR is **not** a finished page. Source photos, drawings and decorations can remain as separate raster assets, but table cells, quotes and text surrounding illustrations must be digital. Only source-verified **front/back covers** may remain as whole-page scans. The current engine is incomplete on complex layouts; never claim unsupported pages were converted. Read `references/digital-text-policy.md`.
 
 ## Pilot: two-stage, genuinely representative
 
@@ -38,7 +38,7 @@ python scripts/run_book.py full --source BOOK.pdf --work-dir ./work
 
 Process the remaining pages with Apple Vision first, reusing caches. Run optional selective Mobile later or with `--enable-mobile` only when it was authorized and resource feasibility is known. The full-book output is always a **REVIEW** until source comparisons and unresolved pages are resolved; it is never automatically FINAL.
 
-**Hard page contract:** Source physical page N must remain output page N: same total count, dimensions and reading order. No missing or overflowed content may move into N+1. Preserve any nonfitting page on its own source page as a labeled searchable-scan fallback instead of clipping, shrinking or silently discarding text. Consult `references/page-fidelity.md` and `references/qa-and-handoff.md`; audit every page with `scripts/page_fidelity_audit.py` using a source-verified OCR reference.
+**Hard page contract:** Source physical page N must remain output page N: same total count, dimensions and reading order. No missing or overflowed content may move into N+1. Preserve any nonfitting page temporarily as an incomplete searchable-scan draft rather than losing it, but **never classify the book as finished** while any non-cover page is still fallback. After `run_book.py full`, the new mandatory `digital_text_policy_gate.py` returns `INCOMPLETE_DIGITAL_PAGES` with source page numbers and a nonzero exit code if the rule is violated. Only actual source-verified first/last covers are exempt; the AI verifies source artwork and records its hash in local `work/cover-evidence.json` **before pilot approval**. Without that evidence no cover is exempt. Passing the digital gate still requires separate editorial/source fidelity QA. Consult `references/page-fidelity.md` and `references/qa-and-handoff.md`; audit every page with `scripts/page_fidelity_audit.py` using a source-verified OCR reference.
 
 ## Stop conditions and honesty
 
@@ -54,4 +54,5 @@ Process the remaining pages with Apple Vision first, reusing caches. Run optiona
 - `references/pilot-and-style-lock.md` — visual pilot and typography
 - `references/page-fidelity.md` — source-to-output page proof
 - `references/qa-and-handoff.md` — editorial acceptance
+- `references/digital-text-policy.md` — mandatory fully digital non-cover pages, cover exceptions and completion gate
 - `references/typography-and-style-review.md` — pilot paragraph rhythm, verified italics, footer and image/table review
