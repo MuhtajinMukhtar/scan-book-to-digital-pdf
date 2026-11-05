@@ -23,64 +23,100 @@ ROLE_NAMES = (
 )
 
 
+def _groups_of_adjacent(values: list[int]) -> list[list[int]]:
+    groups: list[list[int]] = []
+    for n in values:
+        if not groups or n-groups[-1][-1] > 1:
+            groups.append([n])
+        else:
+            groups[-1].append(n)
+    return groups
+
+
+def _max_run(values) -> int:
+    best=current=0
+    for value in values:
+        current=current+1 if value else 0
+        best=max(best,current)
+    return best
+
+
 def page_features(page: fitz.Page) -> dict:
-    pix = page.get_pixmap(matrix=fitz.Matrix(.27, .27), colorspace=fitz.csGRAY, alpha=False)
-    im = Image.frombytes("L", (pix.width, pix.height), pix.samples)
-    im.thumbnail((180, 240))
-    w, h = im.size
+    """Classify visual candidates from source-only tiny grayscale rasters.
+
+    Paper-color/text contrast varies wildly between scans, so use a bright
+    percentile of *whole page* rather than the dark corner of a facing page.
+    """
+    pix = page.get_pixmap(matrix=fitz.Matrix(.42, .42),
+                          colorspace=fitz.csGRAY, alpha=False)
+    w,h = pix.width,pix.height
     if w < 20 or h < 20:
-        raise ValueError("Page thumbnail is too small")
-    raw = im.tobytes()
-    border = [raw[y*w+x] for y in (0, min(h-1, 3), h-1)
-              for x in (0, min(w-1, 3), w-1)]
-    background = max(195, int(statistics.median(border)))
-    threshold = max(90, min(183, background-43))
-    x0, x1 = int(.095*w), int(.905*w)
-    y0, y1 = int(.065*h), int(.935*h)
-    row_fractions = []
-    column_counts = [0] * (x1-x0)
-    ink = 0
+        raise ValueError("Page thumbnail too small")
+    raw = pix.samples
+    hist = [0]*256
+    for shade in raw:
+        hist[shade] += 1
+    quota = len(raw)*.87
+    cumulative=0
+    background=255
+    for color,count in enumerate(hist):
+        cumulative+=count
+        if cumulative>=quota:
+            background=color
+            break
+    # Anti-aliased text at low raster scale needs a softer threshold. A
+    # separate dark threshold is used below to detect thin table rules.
+    threshold=max(110,min(228,background-31))
+    rule_threshold=max(95,min(140,background-72))
+    x0,x1=int(.10*w),int(.90*w)
+    y0,y1=int(.06*h),int(.93*h)
+    fractions=[]
+    ink=0
+    tiles=[]
     for y in range(y0,y1):
-        active=0
-        for x in range(x0,x1):
-            if raw[y*w+x] < threshold:
-                active+=1
-                column_counts[x-x0]+=1
-        row_fractions.append(active/max(1,x1-x0))
-        ink += active
-    col_fractions = [v/max(1,y1-y0) for v in column_counts]
-    text_rows = [i for i,v in enumerate(row_fractions) if .035 <= v <= .48]
-    row_groups=0
-    prior=-3
-    for i in text_rows:
-        if i-prior>2:
-            row_groups+=1
-        prior=i
-    horiz_rules = sum(v>.66 for v in row_fractions)
-    vertical_rules = sum(v>.60 for v in col_fractions)
-    first_mark=next((i for i,v in enumerate(row_fractions) if v>.02), len(row_fractions))
-    top_whitespace=first_mark/max(1,len(row_fractions))
-    tile_heavy=0
-    tiles_checked=0
-    # Dense rectangular grayscale regions are image/diagram *candidates*.
+        count=sum(raw[y*w+x]<threshold for x in range(x0,x1))
+        fractions.append(count/max(1,x1-x0))
+        ink+=count
+    text_rows=[i for i,v in enumerate(fractions) if .026 <= v <= .52]
+    groups=0
+    last=-3
+    for y in text_rows:
+        if y-last>2:
+            groups+=1
+        last=y
+    structural_rows = [
+        y for y in range(y0,y1)
+        if _max_run(raw[y*w+x]<rule_threshold for x in range(x0,x1))
+           >= .57*(x1-x0)
+    ]
+    structural_cols = [
+        x for x in range(x0,x1)
+        if _max_run(raw[y*w+x]<rule_threshold for y in range(y0,y1))
+           >= .21*(y1-y0)
+    ]
+    # Discard thick filled blocks: a colored quotation card or photograph
+    # must not be mislabeled as a table merely because it has dark edges.
+    thin_h=sum(len(group)<=7 for group in _groups_of_adjacent(structural_rows))
+    thin_v=sum(len(group)<=7 for group in _groups_of_adjacent(structural_cols))
     for gy in range(9):
         ya=y0+int((y1-y0)*gy/9)
         yb=y0+int((y1-y0)*(gy+1)/9)
         for gx in range(7):
             xa=x0+int((x1-x0)*gx/7)
             xb=x0+int((x1-x0)*(gx+1)/7)
-            total=max(1,(yb-ya)*(xb-xa))
-            dark=sum(raw[yy*w+xx] < threshold for yy in range(ya,yb) for xx in range(xa,xb))
-            tile_heavy += dark/total > .28
-            tiles_checked+=1
+            area=max(1,(yb-ya)*(xb-xa))
+            dark=sum(raw[yy*w+xx]<threshold for yy in range(ya,yb)
+                     for xx in range(xa,xb))
+            tiles.append(dark/area)
+    dense=sum(dark>.33 for dark in tiles)
+    first_ink=next((i for i,v in enumerate(fractions) if v>.025),len(fractions))
     ink_ratio=ink/max(1,(y1-y0)*(x1-x0))
     return {
-        "row_groups": row_groups,
-        "horizontal_rules": horiz_rules,
-        "vertical_rules": vertical_rules,
-        "dense_tiles": tile_heavy,
-        "ink_ratio": round(ink_ratio, 4),
-        "top_whitespace": round(top_whitespace, 3),
+        "row_groups":groups,"horizontal_rules":thin_h,
+        "vertical_rules":thin_v,
+        "dense_tiles":dense,
+        "ink_ratio":round(ink_ratio,4),
+        "top_whitespace":round(first_ink/max(1,len(fractions)),3),
     }
 
 
@@ -91,21 +127,23 @@ def role_scores(m: dict, number: int, total: int) -> dict:
     vlines=m["vertical_rules"]
     ink=m["ink_ratio"]
     top=m["top_whitespace"]
-    text_score = groups - heavy*1.5 - hlines - vlines
-    table_score = (hlines*2.8 + vlines*2.0 +
-                   min(6, groups)*.3 - heavy*.6)
-    illustration_score = heavy*2.2 + ink*80 - hlines*.7 - vlines*.7
-    chapter_score = top*85 + (max(0,22-groups)*.5) - heavy*.4
-    mixed_score = 15 - abs(groups-18)*.6 + min(10, heavy)*.6 + hlines*.3
-    sparse_score = 35-max(0,groups-9)*1.4 + top*20
+    text_score = groups - heavy*1.2 - hlines*2-vlines*2
+    # A real lined table should contain both horizontal and vertical rules.
+    # A large colored box without cells is mixed-format, not necessarily a table.
+    table_score = (10*min(5,hlines)+12*min(5,vlines)
+                   - .8*heavy - (35 if not hlines or not vlines else 0))
+    illustration_score = 2.0*heavy + ink*50 - hlines*2-vlines*2
+    chapter_score = top*65 + max(0,30-groups)*1.1 + min(6,heavy)*.5
+    mixed_score = 17 - abs(groups-20)*.55 + heavy*.85 + hlines*.7
+    sparse_score = 40-max(0,groups-12)*1.2+top*12+min(6,heavy)*.4
     return {
-        "body_early": text_score + (5 if number<total*.5 else -12),
-        "body_late": text_score + (5 if number>total*.5 else -12),
-        "table_candidate": table_score,
-        "illustration_candidate": illustration_score,
-        "chapter_opener_candidate": chapter_score,
-        "mixed_typography_candidate": mixed_score,
-        "sparse_or_profile_candidate": sparse_score,
+        "body_early":text_score+(5 if number<total*.50 else -12),
+        "body_late":text_score+(5 if number>total*.50 else -12),
+        "table_candidate":table_score,
+        "illustration_candidate":illustration_score,
+        "chapter_opener_candidate":chapter_score,
+        "mixed_typography_candidate":mixed_score,
+        "sparse_or_profile_candidate":sparse_score,
     }
 
 
@@ -130,9 +168,15 @@ def select_diverse(source: Path, count: int = 7, keep_pages: list[int] | None = 
             raise ValueError("Invalid smoke-test pages")
         candidates=[]
         # Always survey cached smoke pages even when uniform sampling skips them.
-        for n in sorted(set(survey_numbers(total)) | set(keep)):
+        to_survey=sorted(set(survey_numbers(total)) | set(keep))
+        if total>30:
+            # Exclude covers/back covers from normal chapter/table samples.
+            to_survey=[n for n in to_survey if 3 <= n <= total-2 or n in keep]
+        for n in to_survey:
             try:
                 features=page_features(doc[n-1])
+                if features["ink_ratio"] < .008 and n not in keep:
+                    continue  # blank/separator, never a representative pilot
             except (ValueError,RuntimeError):
                 continue
             candidates.append({"source_page":n,"features":features,
