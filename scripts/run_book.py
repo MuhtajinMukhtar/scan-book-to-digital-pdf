@@ -19,6 +19,7 @@ import fitz
 from local_book_engine import build, comparison, font_path, parse_pages, sha256
 from select_pilot_pages import choose
 from pilot_archetypes import select_diverse, contact_sheet
+from digital_text_policy_gate import assess as assess_digital_text, allowed_cover_pages
 
 
 HERE = Path(__file__).resolve().parent
@@ -103,6 +104,8 @@ def pilot(args: argparse.Namespace) -> int:
     local_font = font_path(args.font_family, args.font_file)
     out = pilot_dir / "Book_Pilot_REVIEW.pdf"
     source_styles = args.work_dir / "style-annotations.json"
+    cover_file = args.work_dir / "cover-evidence.json"
+    verified_covers = allowed_cover_pages(args.source, cover_file)
     report = build(args.source, args.work_dir, out, "pilot", pages,
                    args.font_family, local_font, args.font_size,
                    strict_hybrid=False, fusion_subdir="fusion_mobile",
@@ -117,6 +120,9 @@ def pilot(args: argparse.Namespace) -> int:
         "font_file_sha256": sha256(local_font),
         "body_font_size_pt": report["body_font_size_pt"],
         "style_annotations_sha256": (sha256(source_styles) if source_styles.is_file() else None),
+        "cover_evidence_sha256": (sha256(cover_file) if cover_file.is_file() else None),
+        "verified_cover_pages": verified_covers,
+        "digital_text_policy": "all_noncover_text_must_be_visible_vector",
         "engine_version": 3,
         "ocr_backend": "apple-vision-primary+paddle-mobile-selective",
         "pilot_stage": args.stage,
@@ -205,6 +211,11 @@ def approve(args: argparse.Namespace) -> int:
         raise ValueError("Pilot samples do not cover enough distinct physical pages")
     if style.get("source_sha256") != sha256(args.source):
         raise ValueError("Pilot belongs to a different original PDF")
+    cover_file = args.work_dir / "cover-evidence.json"
+    if style.get("cover_evidence_sha256") != (
+        sha256(cover_file) if cover_file.is_file() else None
+    ):
+        raise ValueError("Cover evidence changed since the reviewed pilot")
     record = {
         "decision": "PILOT_APPROVED",
         "source_sha256": style["source_sha256"],
@@ -235,6 +246,16 @@ def full(args: argparse.Namespace) -> int:
     new_style_sha = sha256(source_styles) if source_styles.is_file() else None
     if old_style_sha != new_style_sha:
         raise ValueError("Source-verified italic styles changed since pilot approval; redo pilot")
+    cover_file = args.work_dir / "cover-evidence.json"
+    if style.get("cover_evidence_sha256") != (
+        sha256(cover_file) if cover_file.is_file() else None
+    ):
+        raise ValueError("Cover evidence has changed since pilot approval")
+    verified_covers = allowed_cover_pages(args.source, cover_file)
+    if style.get("verified_cover_pages", []) != verified_covers:
+        raise ValueError("Verified cover page list changed since the pilot")
+    if style.get("digital_text_policy") != "all_noncover_text_must_be_visible_vector":
+        raise ValueError("Pilot was approved before strict all-noncover-digital policy")
     if style.get("ocr_backend") != "apple-vision-primary+paddle-mobile-selective":
         raise ValueError("Pilot approved for a different OCR backend; run a fresh safe pilot")
     local_font = Path(style["font_file"])
@@ -243,8 +264,9 @@ def full(args: argparse.Namespace) -> int:
     with fitz.open(args.source) as src:
         pages = list(range(1, len(src)+1))
     ocr_summary = None
-    if not args.skip_ocr:
-        ocr_summary = run_ocr(args.source, args.work_dir, pages, args.dpi,
+    ocr_pages = [n for n in pages if n not in verified_covers]
+    if not args.skip_ocr and ocr_pages:
+        ocr_summary = run_ocr(args.source, args.work_dir, ocr_pages, args.dpi,
                               args.cpu_threads, args.enable_mobile,
                               args.allow_model_download, args.max_mobile_pages,
                               skip_vision=args.reuse_apple)
@@ -252,17 +274,29 @@ def full(args: argparse.Namespace) -> int:
     result = build(args.source, args.work_dir, out, "full", pages,
                    style["font_family"], local_font, style["body_font_size_pt"],
                    approval=approval_path, strict_hybrid=False,
-                   fusion_subdir="fusion_mobile", style_annotations=source_styles)
+                   fusion_subdir="fusion_mobile", style_annotations=source_styles,
+                   verified_cover_pages=set(verified_covers))
+    policy = assess_digital_text(
+        args.source, out, out.with_suffix(".qa.json"),
+        cover_file if cover_file.is_file() else None
+    )
+    policy_file = out.with_suffix(".digital-policy.json")
+    json_write(policy_file, policy)
     print(json.dumps({
-        "status": result["status"], "source_pages": result["source_page_count"],
+        "status": policy["status"], "source_pages": result["source_page_count"],
         "output_pages": result["output_page_count"],
         "digitally_typeset_pages": result["digital_pages"],
         "searchable_scan_fallback_pages": result["fallback_pages"],
         "needs_editorial_review": True,
+        "incomplete_noncover_pages": policy["incomplete_noncover_pages"],
+        "verified_cover_pages": policy["exempt_cover_pages"],
+        "digital_policy_report": str(policy_file),
         "secondary_pending_pages": (ocr_summary or {}).get("secondary_pending_pages", []),
         "pdf": str(out),
+        "note": ("Draft preserved for correction; NOT a completed digital book"
+                 if policy["issues"] else "Digital-text gate passed; source fidelity review still mandatory"),
     }, ensure_ascii=False, indent=2))
-    return 0
+    return 0 if not policy["issues"] else 2
 
 
 def main() -> int:
