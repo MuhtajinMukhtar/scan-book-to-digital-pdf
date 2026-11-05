@@ -95,21 +95,23 @@ def pilot(args: argparse.Namespace) -> int:
         raise ValueError("Pilot must contain at least two pages for a multi-page book")
     min_review = min(total, 5)
     enough_variety = args.stage == "review" and len(pages) >= min_review
+    cover_file = args.work_dir / "cover-evidence.json"
+    verified_covers = allowed_cover_pages(args.source, cover_file)
+    ocr_pages = [n for n in pages if n not in verified_covers]
     ocr_summary = None
-    if not args.skip_ocr:
-        ocr_summary = run_ocr(args.source, args.work_dir, pages, args.dpi,
+    if not args.skip_ocr and ocr_pages:
+        ocr_summary = run_ocr(args.source, args.work_dir, ocr_pages, args.dpi,
                               args.cpu_threads, args.enable_mobile,
                               args.allow_model_download, args.max_mobile_pages,
                               skip_vision=args.reuse_apple)
     local_font = font_path(args.font_family, args.font_file)
     out = pilot_dir / "Book_Pilot_REVIEW.pdf"
     source_styles = args.work_dir / "style-annotations.json"
-    cover_file = args.work_dir / "cover-evidence.json"
-    verified_covers = allowed_cover_pages(args.source, cover_file)
     report = build(args.source, args.work_dir, out, "pilot", pages,
                    args.font_family, local_font, args.font_size,
                    strict_hybrid=False, fusion_subdir="fusion_mobile",
-                   style_annotations=source_styles)
+                   style_annotations=source_styles,
+                   verified_cover_pages=set(verified_covers))
     comparison(args.source, out, pages, pilot_dir / "Book_Pilot_Comparison.pdf")
     style = {
         "source_sha256": report["source_sha256"],
@@ -133,8 +135,10 @@ def pilot(args: argparse.Namespace) -> int:
     # engine digitally reconstructs tables, images or formatted text. Report
     # the honest limitation and block approval instead of promising 220 pages.
     fallback_source_pages = [entry["source_page"] for entry in report["per_page"]
-                             if entry["mode"] != "born_digital_unverified"]
-    insufficient_digital = report["digital_pages"] < min(2,len(pages))
+                             if entry["mode"] not in (
+                                 "born_digital_unverified", "verified_cover_raster_exempt"
+                             )]
+    insufficient_digital = report["digital_pages"] < min(2,len(ocr_pages))
     if ocr_summary is None:
         review_path = args.work_dir / "review" / "SUMMARY.json"
         if review_path.exists():
@@ -167,6 +171,7 @@ def pilot(args: argparse.Namespace) -> int:
         "secondary_pending_pages": pending,
         "secondary_pending_reasons": (ocr_summary or {}).get("secondary_pending_reasons", {}),
         "fallback_sample_pages": report["fallback_pages"],
+        "source_verified_cover_pages": verified_covers,
         "fallback_source_pages": fallback_source_pages,
         "layout_reconstruction_complete": not fallback_source_pages,
         "approval_blocked_reason": (
