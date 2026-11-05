@@ -16,6 +16,7 @@ import sys
 
 import fitz
 from local_book_engine import build, comparison, font_path, parse_pages, sha256
+from select_pilot_pages import choose
 
 
 HERE = Path(__file__).resolve().parent
@@ -35,8 +36,14 @@ def json_write(path: Path, value: dict) -> None:
 
 
 def pilot(args: argparse.Namespace) -> int:
-    with fitz.open(args.source) as doc:
-        pages = parse_pages(args.pages, len(doc), "pilot")
+    if args.pages == "auto":
+        selection = choose(args.source, count=2)
+        pages = selection["pages"]
+        args.work_dir.mkdir(parents=True, exist_ok=True)
+        json_write(args.work_dir / "pilot" / "selection.json", selection)
+    else:
+        with fitz.open(args.source) as doc:
+            pages = parse_pages(args.pages, len(doc), "pilot")
     if len(pages) < 2:
         raise ValueError("A meaningful typographic pilot requires at least 2 source pages")
     if not args.skip_ocr:
