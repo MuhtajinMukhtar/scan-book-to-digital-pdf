@@ -50,6 +50,14 @@ python scripts/run_book.py approve --source "/path/to/book.pdf" --work-dir ./wor
 python scripts/run_book.py full --source "/path/to/book.pdf" --work-dir ./work
 ```
 
+## Penyempurnaan tipografi pilot
+
+Mesin PDF sekarang merapikan **jarak antarbaris dalam paragraf**, menstabilkan posisi kiri baris lanjutan sambil menghormati margin bolak-balik buku, dan mencoba menjadikan **nomor halaman** sebagai teks digital yang dapat dipilih.
+
+**Cetak miring tidak dapat dipastikan hanya dari OCR Apple Vision.** Agen harus membandingkan scan asli dengan PDF contoh, lalu mencatat frasa miring yang benar-benar terlihat di sumber dalam `work/style-annotations.json`. Contoh dan aturannya ada di [review tipografi](references/typography-and-style-review.md). Perbaikannya dirender ulang memakai cache dengan `--skip-ocr`, **bukan** mengulang OCR atau memanggil PaddleOCR lagi.
+
+Jika buku memuat tabel maupun ilustrasi, tampilkan masing-masing contoh sebelum approval buku penuh. **Halaman yang masih berupa scan fallback wajib diberi tahu**, bukan diklaim sebagai halaman digital yang telah ditata ulang.
+
 ## Kualitas dan keterbatasan
 
 Skrip otomatis saat ini menata ulang **teks biasa** dengan tipografi terkontrol. Halaman bergambar, tabel, banyak cetak miring, atau teks yang belum terverifikasi **bisa tetap memakai scan asli yang searchable** dan harus ditandai untuk review. Hasil belum tentu setara dengan pilot manual yang dulu dipoles oleh agen High.
