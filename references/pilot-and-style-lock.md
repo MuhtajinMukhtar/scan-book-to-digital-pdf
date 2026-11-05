@@ -45,7 +45,18 @@ Store the source image references and a machine-readable **`work/pilot/style-pro
 
 Render every pilot sample within an individual frame having the exact source page dimensions. A selected source page must not split into two outputs or borrow space from its neighbor. If its text cannot fit at the approved font size/line spacing, change only source-evidenced layout spacing within the requested style, or present a **searchable-scan fallback of that same page** and ask the user what to prioritize. Do **not** shrink text silently, crop, omit, or move any lines to the following page. Compare the start and end of each sampled source page with the corresponding pilot page and inspect the last paragraph/line visually.
 
-## 5. Generate a real visual pilot
+## 5. Prove the pilot is actually reconstructed
+
+**Do not present the same raster scan as the 'after' result.** A scan with invisible OCR words may be searchable and selectable, but it does *not* demonstrate the requested digital typography and does *not* satisfy the pilot. Distinguish three stages:
+- `OCR_PREVIEW`: the original scanned pages plus a text-recognition layer. Useful internally, **not approvable** as visual pilot.
+- `TYPESET_PILOT`: verified OCR rendered as visible/vector PDF text, with real font family, actual point size, paragraph spacing, indents, images retained as cropped objects, and fixed page borders.
+- `PILOT_APPROVED`: user explicitly approves the **TYPESET_PILOT** version after viewing a side-by-side comparison. A prior "ya/lanjut" replying to an OCR preview cannot authorize all pages.
+
+Run `python scripts/pilot_typeset_gate.py --source BOOK.pdf --pilot BOOK_Pilot_v1_REVIEW.pdf --source-pages 7,19,43,88,104 --json work/pilot/pilot-typeset-check.json`, replacing source indices with the real selected pages in pilot page order. **At least two representative body/content sample pages must genuinely contain visible rendered text**, not a dominant scan bitmap. Compare the PDF font names and sizes to the style profile. Exception/cover artwork can use scan fallback if marked honestly, but such pages do not count toward the minimum real typeset examples. This guard is intentionally conservative; an image-heavy page may be flagged for inspection.
+
+Require `PASS_NEEDS_EDITORIAL_REVIEW` plus independent visual/text QA. If not passed, keep `PILOT_INCOMPLETE_SCAN_PREVIEW`, **do not ask for style approval or start full book**, and redo those pages as visible typeset samples.
+
+## 6. Generate a real visual pilot
 
 Generate **`<Book>_Pilot_v1_REVIEW.pdf`** (only selected source pages, each tagged with its original physical page number) and **`<Book>_Pilot_Comparison.pdf`** with source scan/result side by side or an equivalent clearly labeled comparison. Render and inspect: text accuracy and completeness, alignment, spacing, page density, title hierarchy, paragraph indents, image preservation, font consistency, and no overflow.
 
@@ -53,9 +64,9 @@ Check *digital text* is selectable (not merely an image with invisible OCR layer
 
 Keep explanations short: **"Ini contoh beberapa halaman dari bagian berbeda. Apakah huruf, ukurannya, dan tata letaknya sudah cocok? Jika cocok, saya lanjutkan semuanya."**
 
-## 6. Approval and revisions
+## 7. Approval and revisions
 
-Status starts **`PILOT_AWAITING_APPROVAL`**. The user may answer:
+Status starts **`PILOT_AWAITING_APPROVAL`**. The user may answer **only after the digital typeset gate passes and visually different source-vs-result examples have been presented**:
 - **"Cocok, lanjutkan."** = explicit approval of the current pilot version/style profile (assuming no unresolved blocking QA).
 - **"Huruf agak kecil", "jarak terlalu rapat", etc.** = revise pilot, increase version, compare, and request approval again.
 - **No answer / unrelated conversation** = stay blocked, never launch full-book conversion automatically.
@@ -64,7 +75,7 @@ Record the approval with the exact pilot version, source SHA, style-profile SHA 
 
 Only after approval: set status **`PILOT_APPROVED`**, use the frozen profile for all ordinary pages, reuse OCR caches, and process the remaining pages. Newly encountered layouts can get additional style-role rules without silently changing the agreed body family/size/spacing. If an unavoidable change substantially alters the accepted style, show a focused sample and request approval for that exception.
 
-## 7. Full-book consistency QA
+## 8. Full-book consistency QA
 
 Before final delivery, audit:
 - Page-by-page same **body family, size and leading**, apart from documented intentional exceptions.
