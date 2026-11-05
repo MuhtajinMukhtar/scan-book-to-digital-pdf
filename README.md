@@ -10,7 +10,7 @@ Ubah **PDF buku hasil scan** menjadi buku digital yang lebih nyaman dibaca. Teks
 
 > **Tolong ubah PDF buku ini menjadi buku digital yang nyaman dibaca. Ikuti panduan https://github.com/MuhtajinMukhtar/scan-book-to-digital-pdf dan bimbing saya dengan pilihan sederhana.**
 
-**3.** AI membuat **contoh 5–8 halaman** dengan berbagai bentuk halaman dalam buku, dengan jenis, ukuran, dan gaya tulisan semirip mungkin dengan sumber. Anda boleh menjawab **"ikuti aslinya saja"** untuk pengaturan huruf.
+**3.** AI terlebih dahulu menguji **2 halaman** secara internal, lalu memperluas menjadi **contoh 5–8 halaman** jika berjalan baik, tanpa meminta Anda mengatur alat teknis. dengan berbagai bentuk halaman dalam buku, dengan jenis, ukuran, dan gaya tulisan semirip mungkin dengan sumber. Anda boleh menjawab **"ikuti aslinya saja"** untuk pengaturan huruf.
 
 **4.** Pastikan contoh sebelah kanan **benar-benar dibuat ulang menggunakan teks digital**, bukan foto scan yang sama dengan lapisan pencarian. Lihat PDF contoh dan jawab **"Cocok, lanjutkan"** atau **"Perbaiki bagian ini"**. **AI baru mengerjakan seluruh halaman setelah contoh disetujui.**
 
@@ -25,6 +25,8 @@ Di Mac, alur yang disarankan memakai **Apple Vision + PaddleOCR PP-StructureV3**
 **Penting:** Menambahkan lapisan teks tersembunyi pada scan asli **bukan** membuat buku digital yang ditata ulang. Perbandingan yang menampilkan dua gambar halaman sama bukan pilot yang boleh disetujui. Agen harus menghasilkan contoh halaman dengan teks digital yang benar-benar terlihat, font dan ukuran nyata, serta perbedaan struktur PDF yang dapat diperiksa. Skrip `scripts/pilot_typeset_gate.py` akan menolak pilot berbasis scan yang dominan atau tidak memiliki contoh cukup yang sudah ditata ulang.
 
 **Tahap wajib:** pilih beberapa halaman dari bagian berbeda, bangun aturan huruf/ukuran/spasi/indentasi yang konsisten, buat PDF contoh, minta persetujuan, lalu gunakan aturan yang sudah disepakati untuk seluruh buku. Hasilnya tetap diperiksa halaman demi halaman. Panduan detail: [pilot dan konsistensi gaya](references/pilot-and-style-lock.md).
+
+**Penghematan:** agen diminta menyimpan hasil pembacaan agar tidak mengulang pekerjaan berat, mengerjakan halaman bertahap, serta berhenti sebelum proses lanjutan bila komputer menjadi sangat panas/lambat atau kuota Work hampir habis. Petunjuk teknisnya ada di [resource budget](references/resource-budget.md).
 
 Program dalam repo menyiapkan OCR gabungan dan laporan pemeriksaan; **menata ulang setiap jenis halaman buku masih membutuhkan kerja editorial oleh AI**. Jadi kualitas setara sebuah hasil buku yang pernah dikerjakan tetap harus diuji pada buku baru, bukan dijanjikan tanpa pemeriksaan.
 
