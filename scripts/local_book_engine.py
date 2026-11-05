@@ -336,7 +336,8 @@ def fallback_page(out: fitz.Document, original: fitz.Document, idx: int, lines: 
 def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
           family: str, fontfile: Path, font_size: float | None,
           keep_footer: bool = True, strict_hybrid: bool = True,
-          approval: Path | None = None, fusion_subdir: str = "fusion") -> dict:
+          approval: Path | None = None, fusion_subdir: str = "fusion",
+          style_annotations: Path | None = None) -> dict:
     source_sha = sha256(source)
     if source.resolve() == dest.resolve():
         raise ValueError("Output must never overwrite the source")
