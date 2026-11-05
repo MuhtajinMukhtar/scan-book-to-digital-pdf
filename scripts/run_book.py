@@ -180,7 +180,9 @@ def approve(args: argparse.Namespace) -> int:
     style = json.loads(style_path.read_text(encoding="utf-8"))
     if status.get("pilot_stage") != "review" or status.get("status") != "PILOT_AWAITING_APPROVAL":
         raise ValueError("Full-book approval requires a diverse, source-checked REVIEW pilot, not a two-page smoke test")
-    if status.get("source_page_count") != len(fitz.open(args.source)):
+    with fitz.open(args.source) as original:
+        source_pages = len(original)
+    if status.get("source_page_count") != source_pages:
         raise ValueError("Pilot summary count does not match the supplied book")
     required = min(status["source_page_count"],5)
     if len(set(status.get("selected_pages",[]))) < required:
