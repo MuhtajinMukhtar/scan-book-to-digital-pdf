@@ -20,6 +20,7 @@ from local_book_engine import build, comparison, font_path, parse_pages, sha256
 from select_pilot_pages import choose
 from pilot_archetypes import select_diverse, contact_sheet
 from digital_text_policy_gate import assess as assess_digital_text, allowed_cover_pages
+from page_typography import LAYOUT_REVISION
 
 
 HERE = Path(__file__).resolve().parent
@@ -125,7 +126,7 @@ def pilot(args: argparse.Namespace) -> int:
         "cover_evidence_sha256": (sha256(cover_file) if cover_file.is_file() else None),
         "verified_cover_pages": verified_covers,
         "digital_text_policy": "all_noncover_text_must_be_visible_vector",
-        "engine_version": 3,
+        "engine_version": LAYOUT_REVISION,
         "ocr_backend": "apple-vision-primary+paddle-mobile-selective",
         "pilot_stage": args.stage,
     }
@@ -216,6 +217,8 @@ def approve(args: argparse.Namespace) -> int:
         raise ValueError("Pilot samples do not cover enough distinct physical pages")
     if style.get("source_sha256") != sha256(args.source):
         raise ValueError("Pilot belongs to a different original PDF")
+    if style.get("engine_version") != LAYOUT_REVISION:
+        raise ValueError("Pilot uses an older paragraph layout engine; regenerate PDF from cached OCR")
     cover_file = args.work_dir / "cover-evidence.json"
     if style.get("cover_evidence_sha256") != (
         sha256(cover_file) if cover_file.is_file() else None
@@ -242,6 +245,8 @@ def full(args: argparse.Namespace) -> int:
     approval = json.loads(approval_path.read_text(encoding="utf-8"))
     style = json.loads(style_path.read_text(encoding="utf-8"))
     source_sha = sha256(args.source)
+    if style.get("engine_version") != LAYOUT_REVISION:
+        raise ValueError("Paragraph layout algorithm changed; rerender and reapprove pilot using OCR cache")
     if approval.get("source_sha256") != source_sha or approval.get("decision") != "PILOT_APPROVED":
         raise ValueError("Pilot approval is absent or belongs to a different PDF")
     if approval.get("style_profile_sha256") != sha256(style_path) or style.get("source_sha256") != source_sha:
