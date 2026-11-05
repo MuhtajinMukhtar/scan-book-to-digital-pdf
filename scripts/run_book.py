@@ -123,6 +123,11 @@ def pilot(args: argparse.Namespace) -> int:
     }
     style_path = pilot_dir / "style-profile.json"
     json_write(style_path, style)
+    # A representative pilot with scanned fallback pages is NOT proof that the
+    # engine digitally reconstructs tables, images or formatted text. Report
+    # the honest limitation and block approval instead of promising 220 pages.
+    fallback_source_pages = [entry["source_page"] for entry in report["per_page"]
+                             if entry["mode"] != "born_digital_unverified"]
     insufficient_digital = report["digital_pages"] < min(2,len(pages))
     if ocr_summary is None:
         review_path = args.work_dir / "review" / "SUMMARY.json"
@@ -135,6 +140,7 @@ def pilot(args: argparse.Namespace) -> int:
     status = ("PILOT_INCOMPLETE" if insufficient_digital else
               "PILOT_SMOKE_COMPLETE" if args.stage == "smoke" else
               "PILOT_INSUFFICIENT_VARIETY" if not enough_variety else
+              "PILOT_NEEDS_LAYOUT_WORK" if fallback_source_pages else
               "PILOT_NEEDS_OCR_REVIEW" if pending else
               "PILOT_AWAITING_APPROVAL")
     summary = {
@@ -155,6 +161,14 @@ def pilot(args: argparse.Namespace) -> int:
         "secondary_pending_pages": pending,
         "secondary_pending_reasons": (ocr_summary or {}).get("secondary_pending_reasons", {}),
         "fallback_sample_pages": report["fallback_pages"],
+        "fallback_source_pages": fallback_source_pages,
+        "layout_reconstruction_complete": not fallback_source_pages,
+        "approval_blocked_reason": (
+            "Some representative pages are still whole-page scanned fallbacks. "
+            "Reconstruct their visible text and preserve illustration/photo assets "
+            "before asking approval for a digitally typeset book."
+            if fallback_source_pages else None
+        ),
         "style_profile_sha256": sha256(style_path),
         "pilot_pdf": str(out),
         "comparison_pdf": str(pilot_dir / "Book_Pilot_Comparison.pdf"),
@@ -179,7 +193,9 @@ def approve(args: argparse.Namespace) -> int:
     status = json.loads(status_path.read_text(encoding="utf-8"))
     style = json.loads(style_path.read_text(encoding="utf-8"))
     if status.get("pilot_stage") != "review" or status.get("status") != "PILOT_AWAITING_APPROVAL":
-        raise ValueError("Full-book approval requires a diverse, source-checked REVIEW pilot, not a two-page smoke test")
+        raise ValueError("Full-book approval requires a fully typeset, source-checked REVIEW pilot, not an incomplete or scan-fallback sample")
+    if status.get("fallback_sample_pages", 0) or status.get("fallback_source_pages"):
+        raise ValueError("Scan-fallback pilot pages cannot authorize full-book digital conversion")
     with fitz.open(args.source) as original:
         source_pages = len(original)
     if status.get("source_page_count") != source_pages:
