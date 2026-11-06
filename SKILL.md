@@ -16,6 +16,14 @@ When the user attaches a scanned book and this repo link, proceed with the workf
 - **Light-Mac safety:** process one Mobile page at a time in a monitored child process, with RAM/time limits and small inputs. Skip mobile when no doubt is detected. A model must never be downloaded without permission. If Mobile fails, keep Apple results and flag the page for source review; no automatic expensive retry.
 - **Typesetting:** every **non-cover page containing text** must have visible, selectable, genuinely typeset PDF text. An original full-page scan with hidden OCR is **not** a finished page. Source photos, drawings and decorations can remain as separate raster assets, but table cells, quotes and text surrounding illustrations must be digital. Only source-verified **front/back covers** may remain as whole-page scans. The current engine is incomplete on complex layouts; never claim unsupported pages were converted. Read `references/digital-text-policy.md`.
 
+## Visual regression rule: restore the last preferred pilot
+
+**A user-approved or explicitly preferred earlier visual pilot is the layout baseline.** When a newer pilot looks worse, do not replace it with the new version merely to obtain more digitally typeset pages. Preserve the earlier PDF and all OCR/source caches; restore that PDF as the visual reference while recording any still-incomplete digital pages honestly. Never approve full-book conversion from a scan-fallback preview.
+
+**Do not redesign entire pages to fix a paragraph.** Retain original relative font scale, paragraph density, margins, illustration size/placement, quote treatments and table proportions. Only modify the proven defect on affected source pages. Compare before/after page images and page QA *for every changed page*. If quality deteriorates, reject the new draft and keep the prior reference. No silent smaller fonts, collapsed whitespace, moved figures or global formatting changes.
+
+An edited PDF produced in a separate ChatGPT Work session is **not automatically reverted by a GitHub code rollback**. When that session's prior accepted output exists, use it explicitly as a reference. If it is unavailable, compare against the original source instead of claiming to have restored it. Re-render with existing source-verified OCR caches (`--skip-ocr`), never repeat full-book OCR just for a layout rollback.
+
 ## Pilot: two-stage, genuinely representative
 
 **Critical:** Two body-text samples are a useful *internal smoke test* but **not a complete editorial pilot** for books with pictures, charts, tables, or different typography. A long book must show varied archetypes before approval. User gives **only the PDF and repo link**; agent handles the workflow without questions unless permission is required.
