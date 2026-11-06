@@ -78,6 +78,14 @@ python scripts/run_book.py approve --source "/path/to/book.pdf" --work-dir ./wor
 python scripts/run_book.py full --source "/path/to/book.pdf" --work-dir ./work
 ```
 
+## Penomoran footer juga harus konsisten
+
+**Nomor halaman dalam buku dibuat seragam secara visual:** satu ukuran font, tinggi dari tepi bawah, dan jarak horizontal dari tepi sesuai pola sumber (misalnya kiri di halaman genap dan kanan di halaman ganjil). Yang disamakan adalah **posisi dan tipografinya**, bukan mengubah nomor cetak asli. Jadi nomor cetak yang berbeda dengan nomor urut PDF tetap dipertahankan.
+
+Agen menggunakan aturan per buku dari `scripts/footer_policy.py`. Nomor yang tidak terbaca atau halaman yang memang tidak bernomor **tidak boleh diisi secara asal**. Jika footer berada di ornamen yang tidak aman untuk diperbaiki otomatis, halaman tersebut diberi tanda untuk pemeriksaan visual. Audit memeriksa posisi kiri-kanan, baseline, ukuran font, dan kehadiran angka digital pada halaman yang teridentifikasi.
+
+Perubahan ini tidak otomatis mengubah PDF yang sudah dibuat oleh ChatGPT Work. Untuk hasil yang sedang berjalan, **biarkan selesai terlebih dahulu**; pembetulan berikutnya dapat memakai ulang cache OCR tanpa mengulang seluruh pembacaan buku.
+
 ## Satu buku = satu ukuran kertas untuk semua halaman
 
 **Semua halaman PDF digital wajib berukuran sama**, termasuk cover, halaman judul bab, tabel, dan ilustrasi. Dimensi baku dipilih otomatis dari mayoritas ukuran halaman isi buku sumber (median), **bukan selalu A4** dan bukan mengikuti perbedaan pemotongan hasil scan.
