@@ -20,11 +20,12 @@ import sys
 
 import fitz
 from PIL import Image, ImageDraw
-from page_typography import (split_footer, plan_body, verified_italics,
+from page_typography import (split_footer, footer_number, plan_body, verified_italics,
                              verified_bolds, styled_runs)
 from book_style import infer_style, validate_style, palette, source_verified_override
 from book_page_size import (canonical_page_size, normalized_copy,
                             all_pages_uniform, verify_uniform_pdf)
+from footer_policy import infer_footer_policy, target_footer, source_footer
 
 
 def sha256(path: Path) -> str:
@@ -275,7 +276,10 @@ def paint_line(page: fitz.Page, text: str, x: float, baseline: float, width_limi
 
 
 def digital_footer(page: fitz.Page, src: fitz.Page, items: list[dict],
-                   base_font: fitz.Font, size: float) -> bool:
+                   base_font: fitz.Font, size: float,
+                   policy: dict | None = None,
+                   source_page: int | None = None,
+                   canonical_paper: dict | None = None) -> bool:
     """Preserve original footer graphic; replace only verified OCR page-number ink.
 
     The local background paint is conservative and needs visual QA on textured
@@ -304,10 +308,28 @@ def digital_footer(page: fitz.Page, src: fitz.Page, items: list[dict],
         return False
     box = fitz.Rect(max(0,x-1),max(0,y-1),min(width,x+w+1),min(height,y+h+1))
     foot_size = max(7,min(13,h*.87))
-    if base_font.text_length(line["text"],fontsize=foot_size) > w + 6:
+    draw_x, draw_baseline = x, y + foot_size*.93
+    if policy is not None and canonical_paper is not None and source_page is not None:
+        try:
+            paper_font=float(policy["font_size_pt"])
+            target_width=base_font.text_length(line["text"],fontsize=paper_font)
+            target=target_footer(
+                source_page,line,policy,width,height,
+                float(canonical_paper["width_pt"]),float(canonical_paper["height_pt"]),
+                target_width
+            )
+            foot_size=target["font_size"]
+            draw_x,draw_baseline=target["x"],target["baseline"]
+        except (ValueError,KeyError,TypeError):
+            return False  # preserve original footer artwork; report review
+    else:
+        if base_font.text_length(line["text"],fontsize=foot_size) > w + 6:
+            return False
+    if (draw_baseline-foot_size < 0 or draw_baseline > height-4 or
+            draw_x < 2 or draw_x+base_font.text_length(line["text"],fontsize=foot_size)>width-2):
         return False
     page.draw_rect(box,color=None,fill=tuple(c/255 for c in bg),overlay=True)
-    page.insert_text((x,y+foot_size*.93),line["text"],fontname="BookBody",
+    page.insert_text((draw_x,draw_baseline),line["text"],fontname="BookBody",
                      fontsize=foot_size,color=(.45,.45,.45),overlay=True)
     return True
 
@@ -316,7 +338,9 @@ def typeset_page(out: fitz.Document, original: fitz.Document, idx: int, lines: l
                  fontfile: Path, font: fitz.Font, size: float, keep_footer: bool,
                  italic_phrases: list[str] | None = None,
                  bold_phrases: list[str] | None = None,
-                 book_style: dict | None = None) -> tuple[bool, str]:
+                 book_style: dict | None = None,
+                 source_page_number: int | None = None,
+                 canonical_paper: dict | None = None) -> tuple[bool, str]:
     src = original[idx]
     page = out.new_page(width=src.rect.width,height=src.rect.height)
     style = book_style or {
@@ -403,7 +427,12 @@ def typeset_page(out: fitz.Document, original: fitz.Document, idx: int, lines: l
     if keep_footer and footer:
         # Preserve decorations; report whenever the original page number
         # could not be safely replaced with visible, selectable PDF text.
-        if not digital_footer(page,src,footer,font,size):
+        if not digital_footer(
+            page,src,footer,font,size,
+            policy=style.get("footer_policy"),
+            source_page=source_page_number,
+            canonical_paper=canonical_paper
+        ):
             footer_warning = "footer_number_still_raster_review_needed"
     elif footer:
         return False,"source footer digit not preserved"
@@ -488,6 +517,14 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
     if background_override is not None:
         palette(background_override)
         source_style["background"] = background_override
+    if book_style is None:
+        source_style["footer_policy"] = infer_footer_policy(
+            [(number,doc[number-1].rect.width,doc[number-1].rect.height,lines)
+             for number,lines,_issues in data if number not in verified_cover_pages],
+            canonical_size
+        )
+    elif not isinstance(source_style.get("footer_policy"),dict):
+        raise ValueError("Approved typography missing a book-level footer policy")
     # Produce deterministic pages; page-level rollback leaves the source intact.
     temp = dest.with_suffix(".partial.pdf")
     output = fitz.open()
@@ -527,7 +564,9 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
                 output, doc, number - 1, lines, fontfile, font, size, keep_footer,
                 italic_phrases=verified_italics(annotations, number),
                 bold_phrases=verified_bolds(annotations, number),
-                book_style=source_style
+                book_style=source_style,
+                source_page_number=number,
+                canonical_paper=canonical_size
             )
             if ok:
                 mode_name = "born_digital_unverified"
@@ -547,7 +586,17 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
                 raise ValueError(f"Review cache does not match source page {number}")
             review_status = review_data.get("secondary_status")
             review_reasons = review_data.get("assessment", {}).get("reasons", [])
+        footer_lines=[line for line in lines if footer_number(line)]
+        footer_evidence=source_footer(number,src.rect.width,src.rect.height,
+                    lines,canonical_size["width_pt"],canonical_size["height_pt"])
         rows.append({"source_page": number, "output_page": len(output),
+                     "footer_source_label": (
+                         footer_evidence["label"] if footer_evidence else None),
+                     "footer_expected_side": (
+                         source_style["footer_policy"].get("parity_sides",{})
+                         .get(str(number%2),footer_evidence["side"])
+                         if footer_evidence else None),
+                     "footer_recognition_ambiguous":len(footer_lines)>1,
                      "mode": mode_name, "ocr_issues": len(issues),
                      "ocr_review_required": bool(issues or review_reasons), "ocr_secondary_status": review_status,
                      "detected_nontext_ink_score": round(ink_score, 3),
