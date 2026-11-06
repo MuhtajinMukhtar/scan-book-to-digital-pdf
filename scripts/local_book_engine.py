@@ -23,6 +23,8 @@ from PIL import Image, ImageDraw
 from page_typography import (split_footer, plan_body, verified_italics,
                              verified_bolds, styled_runs)
 from book_style import infer_style, validate_style, palette, source_verified_override
+from book_page_size import (canonical_page_size, normalized_copy,
+                            all_pages_uniform, verify_uniform_pdf)
 
 
 def sha256(path: Path) -> str:
@@ -457,6 +459,7 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         if annotations.get("source_sha256") != source_sha:
             raise ValueError("Style annotations do not match the source PDF hash")
     doc = fitz.open(source)
+    canonical_size = canonical_page_size(doc, verified_cover_pages)
     if verified_cover_pages - {1, len(doc)}:
         raise ValueError("Only first or last physical page may be an exempt cover")
     if mode == "full" and page_list != list(range(1, len(doc)+1)):
@@ -551,15 +554,41 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
                      "reasons": reasons, "warnings": warnings,
                      "source_verified_italic_spans": len(verified_italics(annotations, number)),
                      "source_verified_bold_spans": len(verified_bolds(annotations, number))})
+    # Source scans can have uneven PDF page canvases. Paper is a book-level
+    # property, not a separate choice for every scan. Avoid changing the
+    # typesetting engine's source-relative coordinates: fit its completed
+    # per-page PDF as a *vector* into one common paper size instead.
+    if not all_pages_uniform(output, canonical_size):
+        fitted, page_size_evidence = normalized_copy(
+            output, canonical_size, palette(source_style["background"]),
+            verified_cover_pages=verified_cover_pages
+        )
+        output.close()
+        output = fitted
+    else:
+        page_size_evidence = [
+            {
+                "source_page": i + 1,
+                "before_width_pt": round(output[i].rect.width, 2),
+                "before_height_pt": round(output[i].rect.height, 2),
+                "after_width_pt": canonical_size["width_pt"],
+                "after_height_pt": canonical_size["height_pt"],
+                "scale": 1.0, "offset_x_pt": 0.0, "offset_y_pt": 0.0,
+                "aspect_ratio_preserved": True,
+                "full_page_content_preserved": True,
+                "visual_review_recommended": False,
+            } for i in range(len(output))
+        ]
+    verify_uniform_pdf(output, canonical_size)
+    for row, evidence in zip(rows, page_size_evidence):
+        row["paper_normalization"] = evidence
     dest.parent.mkdir(parents=True, exist_ok=True)
     output.save(temp, garbage=3, deflate=True)
     output.close()
     reread = fitz.open(temp)
     if len(reread) != len(page_list):
         raise RuntimeError("Output page count incorrect, preserving partial for inspection")
-    for k, page_num in enumerate(page_list):
-        if abs(reread[k].rect.width-doc[page_num-1].rect.width) > .5 or abs(reread[k].rect.height-doc[page_num-1].rect.height) > .5:
-            raise RuntimeError("Output page dimensions changed, preserving partial")
+    verify_uniform_pdf(reread, canonical_size)
     reread.close()
     if sha256(source) != source_sha:
         raise RuntimeError("Source modified during build")
@@ -572,6 +601,16 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
                               else "legacy-paddle"),
               "source_page_count": len(doc),
               "output_page_count": len(page_list), "mapping": page_list,
+              "canonical_page_size": canonical_size,
+              "page_size_normalization_required": any(
+                  abs(e["scale"]-1.0) > .001 or
+                  e["offset_x_pt"] > .05 or e["offset_y_pt"] > .05
+                  for e in page_size_evidence
+              ),
+              "page_size_visual_review_pages": [
+                  page_list[i] for i,e in enumerate(page_size_evidence)
+                  if e["visual_review_recommended"]
+              ],
               "font_family": family, "font_file_name": fontfile.name,
               "body_font_size_pt": size, "digital_pages": counts["born_digital_unverified"],
               "fallback_pages": counts["searchable_scan_fallback"],
