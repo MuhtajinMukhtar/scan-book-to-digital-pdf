@@ -1,5 +1,15 @@
 # Scan Book to Digital PDF
 
+## Mulai dari chat Work baru — jangan terjebak laporan lama
+
+**Jika pengguna hanya mengirim PDF + link repo ini, gunakan aturan terkini di [SKILL.md](SKILL.md), bukan menganggap catatan proses lama sebagai kondisi saat ini.** Periksa versi `main` dan SHA PDF sumber. Berkas `PILOT_INCOMPLETE` dari percobaan terdahulu (misalnya Apple Vision halaman 49/124 disertai PP-StructureV3 crash) adalah **riwayat**, bukan bukti bahwa alur Apple Vision saat ini sudah gagal.
+
+**Alur default langsung:** di **Mac** yang tersedia, gunakan Apple Vision untuk **smoke test internal 2 halaman**, lanjutkan pilot **6–8 halaman dengan jenis layout berbeda**, lalu minta persetujuan. Gunakan cache OCR lama **hanya jika benar-benar ada dan SHA sumber cocok**. Jika cache lama tidak cocok, ulang **hanya halaman pilot** menggunakan Apple Vision — bukan PP-StructureV3. PaddleOCR Mobile opsional untuk halaman meragukan, dengan izin instalasi/unduhan.
+
+**Jangan menawarkan Ubuntu sebagai alternatif untuk Apple Vision**, jangan mengulang PP-StructureV3 yang pernah crash, dan jangan meminta pilihan teknis seperti "OCR di Ubuntu atau Apple saja?" bila Mac tersedia. Berhenti dan jelaskan kendala hanya jika pemeriksaan **lingkungan Mac saat ini** menunjukkan masalah nyata. Riwayat crash di proses lama tidak otomatis berarti lingkungan Mac sekarang tidak layak.
+
+Rollback terakhir memulihkan mesin tipografi sebelum percobaan perubahan jarak baris global yang menurunkan kualitas. **Gunakan PDF pilot yang sebelumnya lebih disukai sebagai acuan visual**, tetapi jangan mengaku telah memulihkan PDF sesi Work hanya karena kode GitHub sudah di-rollback.
+
 Ubah PDF buku hasil scan menjadi **PDF digital dengan teks nyata yang dapat dipilih, dicari, dan disalin**. Tetap jaga ilustrasi, tabel, ejaan, dan isi **pada halaman sumber masing-masing**.
 
 ## Untuk orang nonteknis
