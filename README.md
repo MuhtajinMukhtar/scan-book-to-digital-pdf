@@ -63,13 +63,13 @@ python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work 
 
 Opsi `--reuse-apple` **tidak menjalankan ulang** halaman yang sudah dibaca Apple Vision. Jika model Mobile sudah di-cache, hapus opsi `--allow-model-download`.
 
-Untuk memperbaiki layout/font **tanpa mengulang OCR**, gunakan cache yang valid. **Nomor halaman berikut hanya contoh sintaks, jangan digunakan sebagai pilihan otomatis dalam uji blind:**
+Untuk memperbaiki layout/font **tanpa mengulang OCR**, gunakan cache yang valid dan biarkan pemilihan contoh tetap mengikuti analisis sumber:
 
 ```sh
-python scripts/run_book.py pilot --stage review --pages 5,19,32,47,63,80,95 --source "/path/to/book.pdf" --work-dir ./work --skip-ocr
+python scripts/run_book.py pilot --stage review --source "/path/to/book.pdf" --work-dir ./work --skip-ocr
 ```
 
-Pastikan cache Apple Vision untuk halaman tersebut benar-benar ada dan cocok dengan SHA-256 PDF sumber. Jika buku atau nomor sampelnya berbeda, sesuaikan `--pages`. **Persetujuan pilot dari versi layout sebelumnya harus diperbarui**, jangan otomatis memproses seluruh buku.
+Pastikan cache Apple Vision untuk halaman sampel benar-benar ada dan cocok dengan SHA-256 PDF sumber. **Persetujuan pilot dari versi layout sebelumnya harus diperbarui**, jangan otomatis memproses seluruh buku.
 
 **Hanya setelah pilot 6–8 halaman yang mewakili berbagai jenis layout disetujui pengguna:**
 
