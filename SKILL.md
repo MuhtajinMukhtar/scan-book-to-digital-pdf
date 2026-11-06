@@ -7,6 +7,14 @@ description: Digitize scanned PDF books into readable, selectable-text PDFs usin
 
 ## User experience: PDF + repository link is enough
 
+### Fresh-start checkpoint priority (mandatory)
+
+When a user provides **only a PDF and repository URL in a new Work/Codex chat**, first read the **current** `main` `SKILL.md` and verify the source PDF identity. **Do not let stale local reports, notes or artifacts dictate the workflow.** In particular, a past `PILOT_INCOMPLETE` from PP-StructureV3 crashing while OCR ran on source pages 49/124 is **historical evidence**, not the current Apple Vision pilot status. Reuse a cached page only when the source SHA matches; otherwise perform a fresh, limited Apple Vision smoke test on the Mac.
+
+**No unnecessary fork in front of a nontechnical user.** If an authorized Mac with Apple Vision is available, proceed there; **never suggest Ubuntu for Apple Vision**, and never propose repeating PP-StructureV3. Ask the user about installation or downloads only when needed and explicitly permitted. Verify actual current resource failures before stopping; do not extrapolate prior crashed experiments to the new lightweight workflow. Preserve user files and old caches.
+
+If a prior visually preferred pilot exists only in another ChatGPT Work chat, treat it as a reference, not an automatically present file. A GitHub rollback reverts code, **not PDFs already generated in Work**.
+
 When the user attaches a scanned book and this repo link, proceed with the workflow; **do not ask whether to use the repo**. Do not burden a nontechnical user with OCR methods or CLI commands. Ask simple questions only when an optional download, a visual choice, or approval really needs their decision. Keep the original PDF untouched. Use a lightweight agent/model for orchestration; handle exceptions with more reasoning only when necessary.
 
 ## Core design
