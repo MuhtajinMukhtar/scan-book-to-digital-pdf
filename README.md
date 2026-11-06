@@ -2,23 +2,23 @@
 
 ## Mulai dari chat Work baru — jangan terjebak laporan lama
 
-**Jika pengguna hanya mengirim PDF + link repo ini, gunakan aturan terkini di [SKILL.md](SKILL.md), bukan menganggap catatan proses lama sebagai kondisi saat ini.** Periksa versi `main` dan SHA PDF sumber. Berkas `PILOT_INCOMPLETE` dari percobaan terdahulu (misalnya Apple Vision halaman 49/124 disertai PP-StructureV3 crash) adalah **riwayat**, bukan bukti bahwa alur Apple Vision saat ini sudah gagal.
+**Jika pengguna hanya mengirim PDF + link repo ini, gunakan aturan terkini di [SKILL.md](SKILL.md), bukan menganggap catatan proses lama sebagai kondisi saat ini.** Periksa versi `main` dan SHA PDF sumber. Laporan `PILOT_INCOMPLETE` dari percobaan terdahulu adalah riwayat, bukan bukti bahwa alur Apple Vision saat ini gagal. Untuk uji blind, jangan membuka hasil pilot, percakapan, atau checkpoint editorial lama.
 
 **Alur default langsung:** di **Mac** yang tersedia, gunakan Apple Vision untuk **smoke test internal 2 halaman**, lanjutkan pilot **6–8 halaman dengan jenis layout berbeda**, lalu minta persetujuan. Gunakan cache OCR lama **hanya jika benar-benar ada dan SHA sumber cocok**. Jika cache lama tidak cocok, ulang **hanya halaman pilot** menggunakan Apple Vision — bukan PP-StructureV3. PaddleOCR Mobile opsional untuk halaman meragukan, dengan izin instalasi/unduhan.
 
 **Jangan menawarkan Ubuntu sebagai alternatif untuk Apple Vision**, jangan mengulang PP-StructureV3 yang pernah crash, dan jangan meminta pilihan teknis seperti "OCR di Ubuntu atau Apple saja?" bila Mac tersedia. Berhenti dan jelaskan kendala hanya jika pemeriksaan **lingkungan Mac saat ini** menunjukkan masalah nyata. Riwayat crash di proses lama tidak otomatis berarti lingkungan Mac sekarang tidak layak.
 
-Rollback terakhir memulihkan mesin tipografi sebelum percobaan perubahan jarak baris global yang menurunkan kualitas. **Gunakan PDF pilot yang sebelumnya lebih disukai sebagai acuan visual**, tetapi jangan mengaku telah memulihkan PDF sesi Work hanya karena kode GitHub sudah di-rollback.
+Mesin tipografi menggunakan versi saat ini di `main`. **Nilai hasil pilot baru berdasarkan PDF sumber terlebih dahulu**, tanpa mencari acuan hasil lama saat uji blind.
 
 Ubah PDF buku hasil scan menjadi **PDF digital dengan teks nyata yang dapat dipilih, dicari, dan disalin**. Tetap jaga ilustrasi, tabel, ejaan, dan isi **pada halaman sumber masing-masing**.
 
-## Acuan visual untuk mencegah hasil semakin buruk
+## Uji blind adalah alur default
 
-Pada pengujian *Hearty Service* 220 halaman, pengguna lebih menyukai **Pilot Comparison (2)** daripada **(3)**. Versi (3) mengecilkan ukuran teks isi dari sekitar **16,2 pt menjadi 13–14 pt** di beberapa halaman dan mengurangi proporsi sebagian desain. **Rollback kode tidak otomatis mengembalikan PDF Work sebelumnya.**
+**Cukup berikan PDF sumber dan tautan repo.** Agen harus memilih halaman contoh, font, margin, dan tipografi dari **PDF sumber itu sendiri**, bukan dari pilot pekerjaan sebelumnya. Tidak perlu melampirkan PDF hasil lama, meminta pengguna mengingat setelan teknis, atau membaca catatan dari chat sebelumnya.
 
-Untuk **PDF Hearty Service yang SHA-256 sumbernya identik**, repo menyimpan [metrik pilot yang lebih disukai](references/hearty-service-220-preferred-pilot-metrics.json) tanpa halaman scan atau teks berhak cipta, serta [alat pembanding visual](scripts/visual_regression_gate.py). Work dapat menilai hasil baru pada tujuh halaman yang sama untuk mendeteksi pengecilan huruf, pemadatan area teks, atau hilangnya ilustrasi.
+Pengujian tetap berjalan bertahap: **2 halaman uji teknis internal → pilot 6–8 halaman yang benar-benar beragam → persetujuan pengguna**. Cache OCR mentah hanya boleh dipakai bila checksum sumbernya identik. Agen tidak boleh melihat versi/benchmark historis atau cabang arsip demi meniru hasil lama saat uji blind.
 
-**Alat ini bukan mesin reproduksi desain.** Hasilnya masih harus diperiksa secara visual dan diverifikasi terhadap sumber. Buku lain tidak boleh menggunakan ukuran atau metrik khusus Hearty Service secara otomatis.
+Setelah hasil blind selesai, jika pengguna ingin mengukur kemunduran kualitas terhadap pilot yang pernah disukai, `scripts/visual_regression_gate.py` tersedia sebagai **alat evaluasi opsional** menggunakan baseline yang secara terpisah diberikan pengguna. Perbandingan ini tidak dilakukan otomatis.
 
 ## Untuk orang nonteknis
 
@@ -63,10 +63,10 @@ python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work 
 
 Opsi `--reuse-apple` **tidak menjalankan ulang** halaman yang sudah dibaca Apple Vision. Jika model Mobile sudah di-cache, hapus opsi `--allow-model-download`.
 
-Untuk memperbaiki layout/font **tanpa mengulang OCR**, gunakan cache yang valid dan ulangi tahap review pada **nomor halaman yang sama** seperti pilot pilihan (contoh nomor berikut hanya ilustrasi):
+Untuk memperbaiki layout/font **tanpa mengulang OCR**, gunakan cache yang valid. **Nomor halaman berikut hanya contoh sintaks, jangan digunakan sebagai pilihan otomatis dalam uji blind:**
 
 ```sh
-python scripts/run_book.py pilot --stage review --pages 16,25,36,78,86,148,149 --source "/path/to/book.pdf" --work-dir ./work --skip-ocr
+python scripts/run_book.py pilot --stage review --pages 5,19,32,47,63,80,95 --source "/path/to/book.pdf" --work-dir ./work --skip-ocr
 ```
 
 Pastikan cache Apple Vision untuk halaman tersebut benar-benar ada dan cocok dengan SHA-256 PDF sumber. Jika buku atau nomor sampelnya berbeda, sesuaikan `--pages`. **Persetujuan pilot dari versi layout sebelumnya harus diperbarui**, jangan otomatis memproses seluruh buku.
@@ -82,7 +82,7 @@ python scripts/run_book.py full --source "/path/to/book.pdf" --work-dir ./work
 
 **Baseline saat ini adalah mesin tipografi sebelum percobaan perataan dan jarak baris global 6 November 2026.** Percobaan tersebut di-rollback karena hasil PDF pilot terbaru justru memburuk. Mesin tetap mencoba merapikan jarak baris **di dalam masing-masing paragraf**, mempertahankan margin sumber, dan menjadikan nomor halaman sebagai teks digital bila memungkinkan. **Bukan berarti masalah jarak baris/indentasi sudah tuntas pada semua buku.**
 
-**Aturan terpenting:** bila sebuah pilot sebelumnya lebih bagus, **gunakan PDF sebelumnya sebagai acuan visual**. Jangan mengecilkan huruf, memadatkan paragraf, menggeser ilustrasi, atau merancang ulang seluruh halaman hanya untuk memperbaiki satu baris. Ubah hanya elemen yang terbukti salah; periksa perbandingan sebelum/sesudah, dan tolak revisi jika hasil visual menurun.
+**Aturan terpenting untuk revisi setelah uji blind:** bila pengguna secara eksplisit memilih pilot yang lebih bagus, gunakan pilot pilihan itu sebagai acuan visual. Jangan mengecilkan huruf, memadatkan paragraf, menggeser ilustrasi, atau merancang ulang seluruh halaman hanya untuk memperbaiki satu baris. Ubah hanya elemen yang terbukti salah; periksa perbandingan sebelum/sesudah, dan tolak revisi jika hasil visual menurun.
 
 **Rollback kode GitHub tidak otomatis mengembalikan PDF yang telah dibuat di sesi ChatGPT Work.** Simpan/rujuk versi PDF pilot yang lebih disukai, lalu render ulang hanya halaman terkait dengan cache OCR yang masih tersedia. Jika cache tidak tersedia di sesi baru, jangan mengaku cache telah digunakan.
 
