@@ -25,7 +25,7 @@ from digital_text_policy_gate import assess as assess_digital_text, allowed_cove
 HERE = Path(__file__).resolve().parent
 # Rollback to the original pre-global-leading paragraph placement engine.
 # Existing approvals from the regressed revision 4 are not reusable.
-PILOT_LAYOUT_REVISION = 6
+PILOT_LAYOUT_REVISION = 7
 
 
 def run_ocr(source: Path, work: Path, pages: list[int], dpi: int,
