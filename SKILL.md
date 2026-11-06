@@ -32,6 +32,24 @@ When the user attaches a scanned book and this repo link, proceed with the workf
 
 An edited PDF produced in a separate ChatGPT Work session is **not automatically reverted by a GitHub code rollback**. When that session's prior accepted output exists, use it explicitly as a reference. If it is unavailable, compare against the original source instead of claiming to have restored it. Re-render with existing source-verified OCR caches (`--skip-ocr`), never repeat full-book OCR just for a layout rollback.
 
+### Preferred-pilot visual regression for matching sources
+
+Before asking approval for a visually revised pilot, check whether the current source SHA matches a user-preferred baseline in `references/`. The 220-page Hearty Service test source has `references/hearty-service-220-preferred-pilot-metrics.json` measured from the preferred **Comparison (2)**, *not* the worse **(3)**. It contains geometry statistics only, no scan/text.
+
+For that exact source PDF, generate the same seven physical pages and run:
+
+~~~sh
+python scripts/visual_regression_gate.py --source BOOK.pdf \
+  --candidate-comparison work/pilot/Book_Pilot_Comparison.pdf \
+  --baseline references/hearty-service-220-preferred-pilot-metrics.json \
+  --source-pages 16,25,49,78,86,124,148 \
+  --json work/pilot/visual-regression.json
+~~~
+
+A `PILOT_VISUAL_REGRESSION` result blocks any claim of improvement; retain the preferred PDF and revise only failing pages, reusing OCR. Do not turn a user-preferred page into a small-font compressed layout simply to pass the digital-text quota. The comparison detects strong font shrink, vertical compression, lost image area and text-count drops, **not** full visual equivalence, OCR accuracy, italic correctness or table fidelity. Manually compare source and revised pages too.
+
+**Never apply these source-specific metrics to a different book or changed source hash.** For other books, obtain their own preferred pilot and build a separate baseline. A code rollback alone cannot restore prior ChatGPT Work PDF output.
+
 ## Pilot: two-stage, genuinely representative
 
 **Critical:** Two body-text samples are a useful *internal smoke test* but **not a complete editorial pilot** for books with pictures, charts, tables, or different typography. A long book must show varied archetypes before approval. User gives **only the PDF and repo link**; agent handles the workflow without questions unless permission is required.
