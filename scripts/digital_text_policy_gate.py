@@ -14,6 +14,7 @@ from pathlib import Path
 import sys
 
 import fitz
+from book_page_size import canonical_page_size, matches_page_size
 
 
 def sha256(path: Path) -> str:
@@ -111,6 +112,13 @@ def assess(source: Path, output: Path, qa_file: Path,
     covers = allowed_cover_pages(source, cover_evidence)
     with fitz.open(source) as original, fitz.open(output) as out:
         count = len(original)
+        paper = canonical_page_size(original,set(covers))
+        reported_paper = qa.get("canonical_page_size")
+        if reported_paper is not None and (
+            abs(float(reported_paper.get("width_pt", 0)) - paper["width_pt"]) > .02
+            or abs(float(reported_paper.get("height_pt", 0)) - paper["height_pt"]) > .02
+        ):
+            issues.append({"type":"canonical_paper_report_mismatch"})
         if len(out) != count:
             issues.append({"type":"page_count_mismatch","expected":count,"got":len(out)})
         rows=qa.get("per_page",[])
@@ -137,8 +145,14 @@ def assess(source: Path, output: Path, qa_file: Path,
             src=original[number-1]
             page=out[number-1]
             mode=mapped.get(number,{}).get("mode")
-            if abs(src.rect.width-page.rect.width)>.5 or abs(src.rect.height-page.rect.height)>.5:
-                issues.append({"type":"page_geometry_changed","page":number})
+            if not matches_page_size(page,paper):
+                issues.append({
+                    "type":"page_size_not_uniform","page":number,
+                    "expected_width_pt":paper["width_pt"],
+                    "expected_height_pt":paper["height_pt"],
+                    "actual_width_pt":round(page.rect.width,2),
+                    "actual_height_pt":round(page.rect.height,2)
+                })
             trace=page.get_texttrace()
             visible_chars=sum(len(item.get("chars",[])) for item in trace
                               if item.get("type") != 3 and float(item.get("opacity",1))>.5)
@@ -166,6 +180,8 @@ def assess(source: Path, output: Path, qa_file: Path,
         "status":"READY_FOR_EDITORIAL_FIDELITY_REVIEW" if not issues else "INCOMPLETE_DIGITAL_PAGES",
         "source_sha256":source_hash,
         "source_pages":count,
+        "canonical_page_size":paper,
+        "all_pages_same_paper":not any(i.get("type")=="page_size_not_uniform" for i in issues),
         "exempt_cover_pages":covers,
         "incomplete_noncover_pages":sorted({
             i.get("page") for i in issues if isinstance(i.get("page"),int) and i.get("page") not in covers
