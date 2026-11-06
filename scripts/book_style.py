@@ -140,3 +140,28 @@ def validate_style(style: dict) -> None:
     for key in ("leading_pt", "paragraph_gap_pt"):
         if not isinstance(style.get(key), (int, float)) or not 5 <= style[key] <= 80:
             raise ValueError("Invalid book spacing: " + key)
+
+
+def source_verified_override(detected: dict, override: dict, source_sha: str) -> dict:
+    """Allow a visually verified exception without guessing from OCR geometry.
+
+    A nontechnical user never needs to write this file: an agent may record
+    what it actually saw on the *current* book's original scanned pages.
+    """
+    if override.get("source_sha256") != source_sha:
+        raise ValueError("Book style override belongs to another source PDF")
+    if override.get("source_scan_verified") is not True:
+        raise ValueError("Book style override requires source visual verification")
+    alignment = override.get("alignment")
+    if alignment not in ("left", "justify"):
+        raise ValueError("Verified override must explicitly choose left or justify")
+    updated=dict(detected)
+    updated["alignment"]=alignment
+    updated["source_review_required"]=False
+    updated["visual_review_override"]=True
+    for key in ("margin_left_ratio","margin_right_ratio",
+                "leading_pt","paragraph_gap_pt"):
+        if key in override:
+            updated[key]=override[key]
+    validate_style(updated)
+    return updated
