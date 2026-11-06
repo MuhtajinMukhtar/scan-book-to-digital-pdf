@@ -110,11 +110,13 @@ def pilot(args: argparse.Namespace) -> int:
     local_font = font_path(args.font_family, args.font_file)
     out = pilot_dir / "Book_Pilot_REVIEW.pdf"
     source_styles = args.work_dir / "style-annotations.json"
+    source_style_override = args.work_dir / "book-style-override.json"
     report = build(args.source, args.work_dir, out, "pilot", pages,
                    args.font_family, local_font, args.font_size,
                    strict_hybrid=False, fusion_subdir="fusion_mobile",
                    style_annotations=source_styles,
-                   verified_cover_pages=set(verified_covers))
+                   verified_cover_pages=set(verified_covers),
+                   style_override=source_style_override)
     comparison(args.source, out, pages, pilot_dir / "Book_Pilot_Comparison.pdf")
     style = {
         "source_sha256": report["source_sha256"],
@@ -125,6 +127,8 @@ def pilot(args: argparse.Namespace) -> int:
         "font_file_sha256": sha256(local_font),
         "body_font_size_pt": report["body_font_size_pt"],
         "book_style": report["book_style"],
+        "book_style_override_sha256": (sha256(source_style_override)
+                                      if source_style_override.is_file() else None),
         "style_annotations_sha256": (sha256(source_styles) if source_styles.is_file() else None),
         "cover_evidence_sha256": (sha256(cover_file) if cover_file.is_file() else None),
         "verified_cover_pages": verified_covers,
@@ -260,6 +264,11 @@ def full(args: argparse.Namespace) -> int:
     if approval.get("style_profile_sha256") != sha256(style_path) or style.get("source_sha256") != source_sha:
         raise ValueError("Locked typography style was modified after approval")
     source_styles = args.work_dir / "style-annotations.json"
+    source_style_override = args.work_dir / "book-style-override.json"
+    if style.get("book_style_override_sha256") != (
+        sha256(source_style_override) if source_style_override.is_file() else None
+    ):
+        raise ValueError("Book style override changed since pilot approval; rerender")
     old_style_sha = style.get("style_annotations_sha256")
     new_style_sha = sha256(source_styles) if source_styles.is_file() else None
     if old_style_sha != new_style_sha:
