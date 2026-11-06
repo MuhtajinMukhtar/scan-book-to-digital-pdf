@@ -22,7 +22,7 @@ import fitz
 from PIL import Image, ImageDraw
 from page_typography import (split_footer, plan_body, verified_italics,
                              verified_bolds, styled_runs)
-from book_style import infer_style, validate_style, palette
+from book_style import infer_style, validate_style, palette, source_verified_override
 
 
 def sha256(path: Path) -> str:
@@ -432,7 +432,8 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
           style_annotations: Path | None = None,
           verified_cover_pages: set[int] | None = None,
           book_style: dict | None = None,
-          background_override: str | None = None) -> dict:
+          background_override: str | None = None,
+          style_override: Path | None = None) -> dict:
     source_sha = sha256(source)
     verified_cover_pages = set(verified_cover_pages or ())
     if source.resolve() == dest.resolve():
@@ -478,6 +479,9 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
                                  for number,lines,_issues in data
                                  if number not in verified_cover_pages]))
     validate_style(source_style)
+    if book_style is None and style_override and style_override.is_file():
+        override = json.loads(style_override.read_text(encoding="utf-8"))
+        source_style = source_verified_override(source_style, override, source_sha)
     if background_override is not None:
         palette(background_override)
         source_style["background"] = background_override
