@@ -45,11 +45,13 @@ python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work 
 
 Opsi `--reuse-apple` **tidak menjalankan ulang** halaman yang sudah dibaca Apple Vision. Jika model Mobile sudah di-cache, hapus opsi `--allow-model-download`.
 
-Untuk perbaikan layout/font saja, tanpa OCR ulang sama sekali:
+Untuk memperbaiki layout/font **tanpa mengulang OCR**, gunakan cache yang valid dan ulangi tahap review pada **nomor halaman yang sama** seperti pilot pilihan (contoh nomor berikut hanya ilustrasi):
 
 ```sh
-python scripts/run_book.py pilot --source "/path/to/book.pdf" --work-dir ./work --skip-ocr
+python scripts/run_book.py pilot --stage review --pages 16,25,36,78,86,148,149 --source "/path/to/book.pdf" --work-dir ./work --skip-ocr
 ```
+
+Pastikan cache Apple Vision untuk halaman tersebut benar-benar ada dan cocok dengan SHA-256 PDF sumber. Jika buku atau nomor sampelnya berbeda, sesuaikan `--pages`. **Persetujuan pilot dari versi layout sebelumnya harus diperbarui**, jangan otomatis memproses seluruh buku.
 
 **Hanya setelah pilot 6–8 halaman yang mewakili berbagai jenis layout disetujui pengguna:**
 
@@ -58,9 +60,13 @@ python scripts/run_book.py approve --source "/path/to/book.pdf" --work-dir ./wor
 python scripts/run_book.py full --source "/path/to/book.pdf" --work-dir ./work
 ```
 
-## Penyempurnaan tipografi pilot
+## Tipografi pilot dan rollback kualitas visual
 
-Mesin PDF sekarang merapikan **jarak antarbaris dalam paragraf**, menstabilkan posisi kiri baris lanjutan sambil menghormati margin bolak-balik buku, dan mencoba menjadikan **nomor halaman** sebagai teks digital yang dapat dipilih.
+**Baseline saat ini adalah mesin tipografi sebelum percobaan perataan dan jarak baris global 6 November 2026.** Percobaan tersebut di-rollback karena hasil PDF pilot terbaru justru memburuk. Mesin tetap mencoba merapikan jarak baris **di dalam masing-masing paragraf**, mempertahankan margin sumber, dan menjadikan nomor halaman sebagai teks digital bila memungkinkan. **Bukan berarti masalah jarak baris/indentasi sudah tuntas pada semua buku.**
+
+**Aturan terpenting:** bila sebuah pilot sebelumnya lebih bagus, **gunakan PDF sebelumnya sebagai acuan visual**. Jangan mengecilkan huruf, memadatkan paragraf, menggeser ilustrasi, atau merancang ulang seluruh halaman hanya untuk memperbaiki satu baris. Ubah hanya elemen yang terbukti salah; periksa perbandingan sebelum/sesudah, dan tolak revisi jika hasil visual menurun.
+
+**Rollback kode GitHub tidak otomatis mengembalikan PDF yang telah dibuat di sesi ChatGPT Work.** Simpan/rujuk versi PDF pilot yang lebih disukai, lalu render ulang hanya halaman terkait dengan cache OCR yang masih tersedia. Jika cache tidak tersedia di sesi baru, jangan mengaku cache telah digunakan.
 
 **Cetak miring tidak dapat dipastikan hanya dari OCR Apple Vision.** Agen harus membandingkan scan asli dengan PDF contoh, lalu mencatat frasa miring yang benar-benar terlihat di sumber dalam `work/style-annotations.json`. Contoh dan aturannya ada di [review tipografi](references/typography-and-style-review.md). Perbaikannya dirender ulang memakai cache dengan `--skip-ocr`, **bukan** mengulang OCR atau memanggil PaddleOCR lagi.
 
