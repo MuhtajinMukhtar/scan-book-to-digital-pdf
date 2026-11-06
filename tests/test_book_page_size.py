@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from book_page_size import (canonical_page_size, normalized_copy,
                             all_pages_uniform, verify_uniform_pdf)
-from local_book_engine import build, font_path, sha256
+from local_book_engine import build, comparison, font_path, sha256
 from digital_text_policy_gate import assess
 
 
@@ -100,6 +100,13 @@ class UniformPaperTests(unittest.TestCase):
                 self.assertEqual(len(rendered),4)
                 verify_uniform_pdf(rendered,report["canonical_page_size"])
                 self.assertTrue(all(p.get_text("text").strip() for p in rendered))
+            sheet=root/"side-by-side.pdf"
+            comparison(src,dest,[1,2,3,4],sheet)
+            with fitz.open(sheet) as previews:
+                comparison_shapes={(round(p.rect.width,2),round(p.rect.height,2))
+                                   for p in previews}
+                self.assertEqual(len(previews),4)
+                self.assertEqual(len(comparison_shapes),1)
             # Standalone digital-text QA verifies the *book* paper, rather than
             # wrongly demanding each scanned source's uneven canvas size.
             result = assess(src,dest,dest.with_suffix(".qa.json"))
