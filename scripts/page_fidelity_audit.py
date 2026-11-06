@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed audit: scanned source page N must remain output page N.
+"""Fail-closed audit: scanned source page N maps to output page N on uniform paper.
 
 This is evidence-based QA, not proof OCR read the scan perfectly. A human must
 verify uncertain text and image/layout fidelity against each source page.
@@ -15,6 +15,7 @@ import re
 import sys
 
 import fitz
+from book_page_size import canonical_page_size, matches_page_size
 
 
 def sha256(path: Path) -> str:
@@ -55,6 +56,7 @@ def audit(source: Path, output: Path, ocr_dir: Path, manifest_file: Path) -> dic
     page_rows: list[dict] = []
     with fitz.open(source) as src, fitz.open(output) as dst:
         n = len(src)
+        paper = canonical_page_size(src)
         output_count = len(dst)
         if n != len(dst):
             issues.append({"type": "page_count_mismatch", "source": n, "output": len(dst)})
@@ -113,9 +115,13 @@ def audit(source: Path, output: Path, ocr_dir: Path, manifest_file: Path) -> dic
                 traces = page.get_texttrace()
                 if not any(t.get("type") != 3 and t.get("chars") for t in traces):
                     issues.append({"type": "no_visible_digital_text", "page": i})
-            size_a, size_b = src[i-1].rect, page.rect
-            if abs(size_a.width - size_b.width) > .5 or abs(size_a.height - size_b.height) > .5:
-                issues.append({"type": "page_size_mismatch", "page": i})
+            size_b = page.rect
+            if not matches_page_size(page, paper):
+                issues.append({
+                    "type": "page_size_not_uniform", "page": i,
+                    "expected": [paper["width_pt"], paper["height_pt"]],
+                    "actual": [round(size_b.width,2), round(size_b.height,2)]
+                })
             outside = [word[4] for word in page.get_text("words") if
                        word[0] < -.5 or word[1] < -.5 or
                        word[2] > size_b.width + .5 or word[3] > size_b.height + .5]
@@ -158,6 +164,7 @@ def audit(source: Path, output: Path, ocr_dir: Path, manifest_file: Path) -> dic
         issues.append({"type": "source_modified_during_audit"})
     return {"status": "PASS" if not issues else "FAIL_REVIEW_REQUIRED",
             "source_pages": n, "output_pages": output_count,
+            "canonical_page_size": paper,
             "source_sha256": source_hash, "issues": issues,
             "page_data": page_rows,
             "limitations": "OCR and extracted PDF text are imperfect; visual checks and verified corrections remain mandatory."}
