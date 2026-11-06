@@ -430,7 +430,9 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
           keep_footer: bool = True, strict_hybrid: bool = True,
           approval: Path | None = None, fusion_subdir: str = "fusion",
           style_annotations: Path | None = None,
-          verified_cover_pages: set[int] | None = None) -> dict:
+          verified_cover_pages: set[int] | None = None,
+          book_style: dict | None = None,
+          background_override: str | None = None) -> dict:
     source_sha = sha256(source)
     verified_cover_pages = set(verified_cover_pages or ())
     if source.resolve() == dest.resolve():
@@ -471,6 +473,14 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
     size = suggested if font_size is None else font_size
     if not 7 <= size <= 24:
         raise ValueError("Unsupported body font size outside 7-24 pt")
+    source_style = (dict(book_style) if book_style is not None else
+                    infer_style([(number,doc[number-1].rect,lines)
+                                 for number,lines,_issues in data
+                                 if number not in verified_cover_pages]))
+    validate_style(source_style)
+    if background_override is not None:
+        palette(background_override)
+        source_style["background"] = background_override
     # Produce deterministic pages; page-level rollback leaves the source intact.
     temp = dest.with_suffix(".partial.pdf")
     output = fitz.open()
@@ -489,6 +499,7 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
                 "reasons": ["source_scan_verified_cover_exception"],
                 "warnings": [],
                 "source_verified_italic_spans": 0,
+                "source_verified_bold_spans": 0,
             })
             continue
         mode_name = "searchable_scan_fallback"
@@ -507,7 +518,9 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         if not reasons:
             ok, reason = typeset_page(
                 output, doc, number - 1, lines, fontfile, font, size, keep_footer,
-                italic_phrases=verified_italics(annotations, number)
+                italic_phrases=verified_italics(annotations, number),
+                bold_phrases=verified_bolds(annotations, number),
+                book_style=source_style
             )
             if ok:
                 mode_name = "born_digital_unverified"
@@ -532,7 +545,8 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
                      "ocr_review_required": bool(issues or review_reasons), "ocr_secondary_status": review_status,
                      "detected_nontext_ink_score": round(ink_score, 3),
                      "reasons": reasons, "warnings": warnings,
-                     "source_verified_italic_spans": len(verified_italics(annotations, number))})
+                     "source_verified_italic_spans": len(verified_italics(annotations, number)),
+                     "source_verified_bold_spans": len(verified_bolds(annotations, number))})
     dest.parent.mkdir(parents=True, exist_ok=True)
     output.save(temp, garbage=3, deflate=True)
     output.close()
@@ -559,7 +573,8 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
               "fallback_pages": counts["searchable_scan_fallback"],
               "per_page": rows,
               "verified_cover_pages": sorted(verified_cover_pages),
-              "typography_layout_version": 2,
+              "typography_layout_version": 5,
+              "book_style": source_style,
               "style_annotations_sha256": sha256(style_annotations) if style_annotations and style_annotations.exists() else None}
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
     doc.close()
