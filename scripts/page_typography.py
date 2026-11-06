@@ -8,9 +8,6 @@ from __future__ import annotations
 import re
 import statistics
 
-# Changing paragraph placement invalidates approval of prior pilot layouts.
-LAYOUT_REVISION = 4
-
 def footer_number(item: dict) -> bool:
     text = str(item.get("text", "")).strip()
     return bool(
@@ -23,127 +20,56 @@ def split_footer(lines: list[dict]) -> tuple[list[dict], list[dict]]:
     return ([line for line in lines if not footer_number(line)],
             [line for line in lines if footer_number(line)])
 
-def _body_leading(y_positions: list[float], font_size: float) -> float:
-    """Choose a single page-wide prose leading, ignoring paragraph gaps.
-
-    Source/OCR boxes can jitter vertically by several points. Estimating one
-    step *per paragraph* amplified that noise into inconsistent line spacing.
-    """
-    gaps = sorted(
-        b - a for a, b in zip(y_positions, y_positions[1:])
-        if font_size * .70 <= b - a <= font_size * 2.9
-    )
-    if not gaps:
-        return font_size * 1.40
-    # Lowest 70% excludes larger inter-paragraph and heading separations.
-    normal_count = max(1, (len(gaps) * 7 + 9) // 10)
-    ordinary = gaps[:normal_count]
-    estimate = statistics.median(ordinary)
-    return max(font_size * 1.14, min(font_size * 1.85, estimate))
-
-
-def _dominant_left(xs: list[float], font_size: float) -> tuple[float, int]:
-    """Robust body margin based on a majority of line starts, not max spread.
-
-    One OCR outlier must not disable *all* alignment in a paragraph.
-    The best cluster is a group of line starts within about half an em.
-    """
-    tolerance = max(3.5, font_size * .60)
-    clusters = [
-        [x for x in xs if abs(x - center) <= tolerance]
-        for center in xs
-    ]
-    best = max(clusters, key=lambda group: (
-        len(group),
-        -(max(group) - min(group)),
-        -statistics.median(group),
-    ))
-    return statistics.median(best), len(best)
-
-
 def plan_body(body: list[dict], width: float, height: float, font_size: float) -> list[dict]:
-    """Retype on the original page with consistent prose leading and margins.
+    """Keep every original line on its source page with regular paragraph leading.
 
-    Preserve source paragraph breaks, true first-line indentation and unusual
-    centered/list layouts. Only fix small/isolated OCR x-coordinate errors in a
-    paragraph with a clear majority left edge. Never reflow onto the next page.
+    No reflow across source lines: recover paragraph groups from vertical gaps,
+    stabilize continuation x and within-paragraph leading. Reject unsafe fits.
     """
     if not body:
         return []
     ordered = sorted(body, key=lambda item: (round(float(item["y"]), 4), float(item["x"])))
-    ys = [float(line["y"]) * height for line in ordered]
-    leading = _body_leading(ys, font_size)
+    ys = [float(line["y"])*height for line in ordered]
+    dy = [b-a for a,b in zip(ys,ys[1:]) if b>a and font_size*.72 < b-a < font_size*3.5]
+    base_step = statistics.median(dy) if dy else font_size*1.4
     groups: list[list[dict]] = [[]]
-    for index, line in enumerate(ordered):
-        if index:
-            gap = ys[index] - ys[index - 1]
-            if (gap > max(leading * 1.46, font_size * 1.78)
-                    or gap < font_size * .66):
-                groups.append([])
+    for i,line in enumerate(ordered):
+        if i and (ys[i]-ys[i-1] > max(base_step*1.46,font_size*1.75)
+                  or ys[i]-ys[i-1] < font_size*.72):
+            groups.append([])
         groups[-1].append(line)
-
-    positions: list[dict] = []
-    for group_index, group in enumerate(groups):
-        source_top = [float(item["y"]) * height for item in group]
-        xs = [float(item["x"]) * width for item in group]
-        text_lengths = [len(str(item.get("text", "")).strip()) for item in group]
-        prose = len(group) >= 3 and sum(n >= 22 for n in text_lengths) >= 2
-        anchor, support = _dominant_left(xs, font_size)
-        # A centred multi-line quote/title often has different left edges
-        # precisely because the widths differ. Respect that source geometry.
-        centers = [(x + float(item["width"]) * width / 2)
-                   for x, item in zip(xs, group)]
-        likely_centered = (
-            max(xs) - min(xs) > font_size * 1.10
-            and max(centers) - min(centers) < font_size * .8
-        )
-        consensus = (
-            prose and not likely_centered
-            and support >= max(2, (len(xs) + 1) // 2)
-        )
-
-        for j, item in enumerate(group):
-            source_x = xs[j]
-            draw_x = source_x
-            if consensus:
-                difference = source_x - anchor
-                if j == 0:
-                    # The first line may intentionally be indented one or two
-                    # ems. Only remove sub-half-em OCR jitter on that line.
-                    if abs(difference) <= font_size * .45:
-                        draw_x = anchor
-                elif abs(difference) <= font_size * 2.25:
-                    # A very short, visibly indented final line may be part
-                    # of a source quote or signature rather than left prose.
-                    is_special_last_line = (
-                        j == len(group) - 1
-                        and text_lengths[j] < max(text_lengths) * .42
-                        and difference > font_size * .85
-                    )
-                    if not is_special_last_line:
-                        draw_x = anchor
-
-            # All ordinary paragraphs share page-wide leading. A one-line
-            # paragraph keeps its original source y-position.
-            baseline = source_top[0] + font_size * .89 + j * leading
+    positions = []
+    for group_index,group in enumerate(groups):
+        original_y = [float(x["y"])*height for x in group]
+        steps = [b-a for a,b in zip(original_y,original_y[1:]) if b>a]
+        step = max(font_size*1.14,
+                   min(font_size*1.85, statistics.median(steps) if steps else base_step))
+        xs = [float(item["x"])*width for item in group]
+        continuity = xs[1:] if len(xs)>1 else xs
+        base_x = statistics.median(continuity)
+        # Do not force a center-aligned title or visually unusual text into a body margin.
+        uniform = bool(len(group)>1 and max(continuity)-min(continuity) <= font_size*.8
+                       and max(len(line["text"]) for line in group) >= 25)
+        first_y = original_y[0] + font_size*.89
+        for j,item in enumerate(group):
+            x = base_x if (uniform and j > 0) else xs[j]
+            baseline = first_y + j*step
             positions.append({
                 **item,
-                "draw_x": draw_x,
+                "draw_x": x,
                 "baseline": baseline,
                 "paragraph_index": group_index,
-                "paragraph_last": j == len(group) - 1,
+                "paragraph_last": j == len(group)-1,
                 "paragraph_line_count": len(group),
-                "line_step": round(leading, 3),
-                "alignment_corrected": abs(draw_x - source_x) > .5,
+                "line_step": round(step, 3),
             })
-
-    for i, item in enumerate(positions):
-        if item["draw_x"] < 4 or item["baseline"] > height - 15:
+    # Check both consecutive glyph baseline gaps and page limits before drawing.
+    for i,item in enumerate(positions):
+        if item["draw_x"] < 4 or item["baseline"] > height-15:
             raise ValueError("Text line would leave original source page")
-        if i and item["baseline"] - positions[i-1]["baseline"] < font_size * .89:
+        if i and item["baseline"]-positions[i-1]["baseline"] < font_size*.89:
             raise ValueError("Paragraph spacing would overlap neighboring lines")
     return positions
-
 
 def verified_italics(annotations: dict, source_page: int) -> list[str]:
     entry = annotations.get("pages", {}).get(str(source_page), {})
