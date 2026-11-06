@@ -78,9 +78,19 @@ python scripts/run_book.py approve --source "/path/to/book.pdf" --work-dir ./wor
 python scripts/run_book.py full --source "/path/to/book.pdf" --work-dir ./work
 ```
 
+## Tipografi mengikuti sumber, bukan satu gaya untuk semua buku
+
+**Perataan paragraf dideteksi dari PDF sumber.** Buku yang rata kiri tetap memiliki ujung kanan tidak rata; buku yang sumbernya justify akan ditata rata kiri-kanan secara hati-hati, dengan batas pelebaran spasi agar antarkata tetap nyaman dibaca. Jika deteksi sumber meragukan, agent perlu memeriksa scan, bukan memaksakan justify.
+
+Pada halaman teks biasa, engine mencoba menjaga **spasi antarkata, margin kiri-kanan, jarak antarbaris, dan jarak antarparagraf lebih konsisten**, dengan koreksi kecil agar tidak merusak komposisi buku. Indentasi yang disengaja, teks rata tengah, ilustrasi, dan layout khusus tetap mengikuti sumber. Bentuk huruf **bold dan italic** dapat diperkuat dengan anotasi yang diverifikasi langsung dari scan asli; OCR tidak menjamin deteksinya otomatis sempurna.
+
+**Default background:** putih tulang/krem sangat muda untuk halaman biasa. Desain dan ilustrasi khusus tetap dipertahankan. Setelah buku utama berhasil dibuat dan lolos pemeriksaan, agent boleh menawarkan **versi kedua dengan latar putih bersih**, cukup setelah pengguna setuju. Ini hanya penggantian warna dasar lewat render ulang dari cache, **tanpa OCR ulang** dan tanpa mengganti font/posisi teks. Potongan footer/gambar perlu ditinjau agar tidak muncul perbedaan warna.
+
+Pilihan tipografi dikunci bersama persetujuan pilot. Untuk kasus source yang memerlukan penyesuaian lebih lanjut, lihat [panduan tipografi](references/typography-and-style-review.md).
+
 ## Tipografi pilot dan rollback kualitas visual
 
-**Baseline saat ini adalah mesin tipografi sebelum percobaan perataan dan jarak baris global 6 November 2026.** Percobaan tersebut di-rollback karena hasil PDF pilot terbaru justru memburuk. Mesin tetap mencoba merapikan jarak baris **di dalam masing-masing paragraf**, mempertahankan margin sumber, dan menjadikan nomor halaman sebagai teks digital bila memungkinkan. **Bukan berarti masalah jarak baris/indentasi sudah tuntas pada semua buku.**
+Engine mempertahankan pembelajaran dari rollback: **hindari perubahan global yang memadatkan halaman**. Perbaikan tipografi sekarang dilakukan secara konservatif, mengikuti pola sumber dan harus diperiksa melalui pilot. Belum berarti semua buku sudah sempurna secara otomatis.
 
 **Aturan terpenting untuk revisi setelah uji blind:** bila pengguna secara eksplisit memilih pilot yang lebih bagus, gunakan pilot pilihan itu sebagai acuan visual. Jangan mengecilkan huruf, memadatkan paragraf, menggeser ilustrasi, atau merancang ulang seluruh halaman hanya untuk memperbaiki satu baris. Ubah hanya elemen yang terbukti salah; periksa perbandingan sebelum/sesudah, dan tolak revisi jika hasil visual menurun.
 
