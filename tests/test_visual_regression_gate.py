@@ -43,7 +43,7 @@ class GoldenVisualGateTests(unittest.TestCase):
                               "An original source paragraph in digital type",
                               fontsize=font_size)
             if art and number==0:
-                raster=Image.new("RGB",(350,220),(.77*255,.79*255,.80*255))
+                raster=Image.new("RGB",(350,220),(196,201,204))
                 data=BytesIO()
                 raster.save(data,format="PNG")
                 p.insert_image(fitz.Rect(750,525,1110,735),stream=data.getvalue())
