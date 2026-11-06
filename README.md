@@ -78,6 +78,14 @@ python scripts/run_book.py approve --source "/path/to/book.pdf" --work-dir ./wor
 python scripts/run_book.py full --source "/path/to/book.pdf" --work-dir ./work
 ```
 
+## Satu buku = satu ukuran kertas untuk semua halaman
+
+**Semua halaman PDF digital wajib berukuran sama**, termasuk cover, halaman judul bab, tabel, dan ilustrasi. Dimensi baku dipilih otomatis dari mayoritas ukuran halaman isi buku sumber (median), **bukan selalu A4** dan bukan mengikuti perbedaan pemotongan hasil scan.
+
+Jika ukuran halaman sumber tidak konsisten, setiap halaman hasil digital dipasang secara proporsional di kertas baku: **tidak diregangkan, dipotong, atau dipindahkan ke halaman berikutnya**. Halaman dengan perubahan skala besar ditandai untuk pemeriksaan visual. Jumlah halaman dan isi teks harus tetap. Lihat [aturan penyeragaman kertas](references/uniform-book-paper.md).
+
+**Sudah telanjur memproses seluruh buku di Work?** Tidak perlu mengulang OCR. Agen dapat memakai hasil PDF yang sudah jadi dan menjalankan `scripts/uniform_page_size.py` untuk membuat file **baru** dengan ukuran seluruh halaman seragam. File lama tetap aman. Pemeriksaan tipografi, kualitas OCR dan ilustrasi tetap dilakukan secara terpisah.
+
 ## Tipografi mengikuti sumber, bukan satu gaya untuk semua buku
 
 **Perataan paragraf dideteksi dari PDF sumber.** Buku yang rata kiri tetap memiliki ujung kanan tidak rata; buku yang sumbernya justify akan ditata rata kiri-kanan secara hati-hati, dengan batas pelebaran spasi agar antarkata tetap nyaman dibaca. Jika deteksi sumber meragukan, agent perlu memeriksa scan, bukan memaksakan justify.
