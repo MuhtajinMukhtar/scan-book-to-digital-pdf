@@ -20,7 +20,9 @@ import sys
 
 import fitz
 from PIL import Image, ImageDraw
-from page_typography import split_footer, plan_body, verified_italics, styled_tokens
+from page_typography import (split_footer, plan_body, verified_italics,
+                             verified_bolds, styled_runs)
+from book_style import infer_style, validate_style, palette
 
 
 def sha256(path: Path) -> str:
@@ -200,35 +202,73 @@ def italic_font_file(regular: Path) -> Path | None:
                  if candidate != regular and candidate.is_file()), None)
 
 
+def styled_font_file(regular: Path, kind: str) -> Path | None:
+    """Look for a *real* matching local bold or bold-italic file."""
+    if kind not in ("bold", "bold_italic"):
+        raise ValueError("Invalid styled font variant")
+    names = {
+        "Arial.ttf": ("Arial Bold.ttf", "Arial Bold Italic.ttf"),
+        "Georgia.ttf": ("Georgia Bold.ttf", "Georgia Bold Italic.ttf"),
+        "Times New Roman.ttf": ("Times New Roman Bold.ttf", "Times New Roman Bold Italic.ttf"),
+        "DejaVuSans.ttf": ("DejaVuSans-Bold.ttf", "DejaVuSans-BoldOblique.ttf"),
+        "DejaVuSerif.ttf": ("DejaVuSerif-Bold.ttf", "DejaVuSerif-BoldItalic.ttf"),
+    }
+    n = 0 if kind == "bold" else 1
+    candidates = [regular.with_name(names[regular.name][n])] if regular.name in names else []
+    for old, new in (("-Regular", "-Bold" if n == 0 else "-BoldItalic"),
+                     ("Regular", "Bold" if n == 0 else "BoldItalic")):
+        if old in regular.name:
+            candidates.append(regular.with_name(regular.name.replace(old, new)))
+    candidates.append(regular.with_name(
+        regular.stem + ("-Bold" if n == 0 else "-BoldItalic") + regular.suffix))
+    return next((candidate for candidate in candidates
+                 if candidate != regular and candidate.is_file()), None)
+
+
 def paint_line(page: fitz.Page, text: str, x: float, baseline: float, width_limit: float,
                base_font: fitz.Font, font_size: float, italic_phrases: list[str],
-               italic_font: fitz.Font | None, justify_to: float | None = None) -> bool:
-    tokens = styled_tokens(text, italic_phrases)
-    if any(italic for token, italic in tokens) and italic_font is None:
-        raise ValueError("Source-verified italics require a matching local italic font")
-    widths = [
-        (italic_font if italic else base_font).text_length(token, fontsize=font_size)
-        for token,italic in tokens
-    ]
-    natural = sum(widths)
-    if natural > width_limit + 1.5:
+               italic_font: fitz.Font | None, justify_to: float | None = None,
+               bold_phrases: list[str] | None = None,
+               bold_font: fitz.Font | None = None,
+               bold_italic_font: fitz.Font | None = None) -> bool:
+    # Normalize accidental multiple OCR spaces. Do not alter punctuation or
+    # attempt cross-line rewriting in the fixed-source-page book workflow.
+    text = re.sub(r"\s+", " ", text.strip())
+    tokens = styled_runs(text, italic_phrases, bold_phrases or [])
+    def variant(italic: bool, bold: bool) -> tuple[fitz.Font | None, str]:
+        if bold and italic:
+            return bold_italic_font, "BookBoldItalic"
+        if bold:
+            return bold_font, "BookBold"
+        if italic:
+            return italic_font, "BookItalic"
+        return base_font, "BookBody"
+    lengths=[]
+    for token,ital,bold in tokens:
+        selected,_name=variant(ital,bold)
+        if selected is None:
+            raise ValueError("Source-verified bold/italic font is unavailable")
+        lengths.append(selected.text_length(token,fontsize=font_size))
+    natural=sum(lengths)
+    if natural>width_limit+1.5:
         return False
-    gaps = [i for i,(token,_) in enumerate(tokens) if token.isspace()]
-    extra = 0.0
+    gaps=[i for i,(token,_,_) in enumerate(tokens) if token.isspace()]
+    extra=0.0
     if justify_to is not None and gaps:
-        proposed = (justify_to - x - natural) / len(gaps)
-        # Do not apply grotesque spacing to short/abnormal lines.
-        if 0 <= proposed <= font_size*.5:
-            extra = proposed
-    cursor = x
-    for (token,italic), advance in zip(tokens,widths):
+        proposed=(justify_to-x-natural)/len(gaps)
+        # If reaching the right margin requires extreme spacing, *do not*
+        # force it. Source-aligned ragged-right text never enters this branch.
+        if 0 <= proposed <= font_size*.28 and natural >= (justify_to-x)*.83:
+            extra=proposed
+    cursor=x
+    for (token,ital,bold),advance in zip(tokens,lengths):
         if token.isspace():
-            cursor += advance + extra
+            cursor+=advance+extra
             continue
-        page.insert_text((cursor,baseline),token,
-                         fontname="BookItalic" if italic else "BookBody",
-                         fontsize=font_size,color=(.17,.19,.18), overlay=True)
-        cursor += advance
+        _font,name=variant(ital,bold)
+        page.insert_text((cursor,baseline),token,fontname=name,
+                         fontsize=font_size,color=(.17,.19,.18),overlay=True)
+        cursor+=advance
     return True
 
 
