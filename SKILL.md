@@ -9,11 +9,11 @@ description: Digitize scanned PDF books into readable, selectable-text PDFs usin
 
 ### Fresh-start checkpoint priority (mandatory)
 
-When a user provides **only a PDF and repository URL in a new Work/Codex chat**, first read the **current** `main` `SKILL.md` and verify the source PDF identity. **Do not let stale local reports, notes or artifacts dictate the workflow.** In particular, a past `PILOT_INCOMPLETE` from PP-StructureV3 crashing while OCR ran on source pages 49/124 is **historical evidence**, not the current Apple Vision pilot status. Reuse a cached page only when the source SHA matches; otherwise perform a fresh, limited Apple Vision smoke test on the Mac.
+When a user provides **only a PDF and repository URL in a new Work/Codex chat**, first read the **current** `main` `SKILL.md` and verify the source PDF identity. **Do not let stale reports or previous experiments dictate the workflow.** In a blind run, do not inspect prior Work sessions, historic checkpoints, or source-specific style references. Reuse raw cached OCR only if the source SHA matches; otherwise perform a fresh, limited Apple Vision smoke test on the Mac.
 
 **No unnecessary fork in front of a nontechnical user.** If an authorized Mac with Apple Vision is available, proceed there; **never suggest Ubuntu for Apple Vision**, and never propose repeating PP-StructureV3. Ask the user about installation or downloads only when needed and explicitly permitted. Verify actual current resource failures before stopping; do not extrapolate prior crashed experiments to the new lightweight workflow. Preserve user files and old caches.
 
-If a prior visually preferred pilot exists only in another ChatGPT Work chat, treat it as a reference, not an automatically present file. A GitHub rollback reverts code, **not PDFs already generated in Work**.
+Never assume another chat's PDFs are present. A GitHub code rollback does not revert PDFs already generated elsewhere.
 
 When the user attaches a scanned book and this repo link, proceed with the workflow; **do not ask whether to use the repo**. Do not burden a nontechnical user with OCR methods or CLI commands. Ask simple questions only when an optional download, a visual choice, or approval really needs their decision. Keep the original PDF untouched. Use a lightweight agent/model for orchestration; handle exceptions with more reasoning only when necessary.
 
@@ -26,29 +26,17 @@ When the user attaches a scanned book and this repo link, proceed with the workf
 
 ## Visual regression rule: restore the last preferred pilot
 
-**A user-approved or explicitly preferred earlier visual pilot is the layout baseline.** When a newer pilot looks worse, do not replace it with the new version merely to obtain more digitally typeset pages. Preserve the earlier PDF and all OCR/source caches; restore that PDF as the visual reference while recording any still-incomplete digital pages honestly. Never approve full-book conversion from a scan-fallback preview.
+**Only when the user explicitly provides or requests a prior approved/preferred pilot after the blind test**, use it as a visual baseline. When a revised pilot looks worse, do not replace it merely to obtain more digitally typeset pages. Preserve the earlier PDF and all OCR/source caches; restore that PDF as the visual reference while recording any still-incomplete digital pages honestly. Never approve full-book conversion from a scan-fallback preview.
 
 **Do not redesign entire pages to fix a paragraph.** Retain original relative font scale, paragraph density, margins, illustration size/placement, quote treatments and table proportions. Only modify the proven defect on affected source pages. Compare before/after page images and page QA *for every changed page*. If quality deteriorates, reject the new draft and keep the prior reference. No silent smaller fonts, collapsed whitespace, moved figures or global formatting changes.
 
 An edited PDF produced in a separate ChatGPT Work session is **not automatically reverted by a GitHub code rollback**. When that session's prior accepted output exists, use it explicitly as a reference. If it is unavailable, compare against the original source instead of claiming to have restored it. Re-render with existing source-verified OCR caches (`--skip-ocr`), never repeat full-book OCR just for a layout rollback.
 
-### Preferred-pilot visual regression for matching sources
+### Blind evaluation is the default
 
-Before asking approval for a visually revised pilot, check whether the current source SHA matches a user-preferred baseline in `references/`. The 220-page Hearty Service test source has `references/hearty-service-220-preferred-pilot-metrics.json` measured from the preferred **Comparison (2)**, *not* the worse **(3)**. It contains geometry statistics only, no scan/text.
+When the user submits **only the scanned PDF and repository link**, independently derive font, margins, layout styles, representative pages and OCR corrections **from the current source PDF**. This is a blind pilot. Do **not** search earlier chats, archived branches/commits, old pilot PDFs, source-specific benchmark metrics or past editorial decisions to tune the result. Do not hardcode prior page selections or preferred font sizes. Source-matched reusable OCR caches are permitted for efficiency, but their existence is not proof of editorial quality.
 
-For that exact source PDF, generate the same seven physical pages and run:
-
-~~~sh
-python scripts/visual_regression_gate.py --source BOOK.pdf \
-  --candidate-comparison work/pilot/Book_Pilot_Comparison.pdf \
-  --baseline references/hearty-service-220-preferred-pilot-metrics.json \
-  --source-pages 16,25,49,78,86,124,148 \
-  --json work/pilot/visual-regression.json
-~~~
-
-A `PILOT_VISUAL_REGRESSION` result blocks any claim of improvement; retain the preferred PDF and revise only failing pages, reusing OCR. Do not turn a user-preferred page into a small-font compressed layout simply to pass the digital-text quota. The comparison detects strong font shrink, vertical compression, lost image area and text-count drops, **not** full visual equivalence, OCR accuracy, italic correctness or table fidelity. Manually compare source and revised pages too.
-
-**Never apply these source-specific metrics to a different book or changed source hash.** For other books, obtain their own preferred pilot and build a separate baseline. A code rollback alone cannot restore prior ChatGPT Work PDF output.
+First create the internal two-page smoke test, then an independently selected 6–8-page representative review pilot. Show the source-vs-output comparison and per-page QA. Do not process the entire book without explicit user approval. If the user *later asks* for comparison to an earlier favorite pilot, use `scripts/visual_regression_gate.py` with an explicitly supplied baseline **after** the blind pilot has been generated; this is an optional independent validation, not part of default creation. Do not claim the metrics alone prove visual equivalence.
 
 ## Pilot: two-stage, genuinely representative
 
