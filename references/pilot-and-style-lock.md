@@ -43,7 +43,7 @@ Store the source image references and a machine-readable **`work/pilot/style-pro
 
 ## 4. Guarantee fixed pages in the pilot
 
-Render every pilot sample within an individual frame having the exact source page dimensions. A selected source page must not split into two outputs or borrow space from its neighbor. If its text cannot fit at the approved font size/line spacing, change only source-evidenced layout spacing within the requested style, or present a **searchable-scan fallback of that same page** and ask the user what to prioritize. Do **not** shrink text silently, crop, omit, or move any lines to the following page. Compare the start and end of each sampled source page with the corresponding pilot page and inspect the last paragraph/line visually.
+Render every pilot sample within the **single canonical paper size chosen from the source book's body pages** (same dimensions for every output and cover page). Preserve individual source-page content by proportional centered fitting, never by cropping or stretching. A selected source page must not split into two outputs or borrow space from its neighbor. If its text cannot fit at the approved font size/line spacing, change only source-evidenced layout spacing within the requested style, or present a **searchable-scan fallback of that same page** and ask the user what to prioritize. Do **not** shrink text silently, crop, omit, or move any lines to the following page. Compare the start and end of each sampled source page with the corresponding pilot page and inspect the last paragraph/line visually.
 
 ## 5. Prove the pilot is actually reconstructed
 
