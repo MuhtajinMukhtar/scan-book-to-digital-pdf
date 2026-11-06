@@ -581,7 +581,9 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
         ]
     verify_uniform_pdf(output, canonical_size)
     for row, evidence in zip(rows, page_size_evidence):
-        row["paper_normalization"] = evidence
+        row["paper_normalization"] = {
+            **evidence, "source_page": row["source_page"]
+        }
     dest.parent.mkdir(parents=True, exist_ok=True)
     output.save(temp, garbage=3, deflate=True)
     output.close()
@@ -631,14 +633,15 @@ def comparison(source: Path, output: Path, page_numbers: list[int], dest: Path) 
     for i, source_number in enumerate(page_numbers):
         original = before[source_number-1]
         result = after[i]
-        w, h = original.rect.width, original.rect.height
-        frame = target.new_page(width=2*w+24, height=h+32)
-        a = fitz.Rect(0, 32, w, h+32)
-        b = fitz.Rect(w+24, 32, 2*w+24, h+32)
+        panel_w = max(original.rect.width, result.rect.width)
+        panel_h = max(original.rect.height, result.rect.height)
+        frame = target.new_page(width=2*panel_w+24, height=panel_h+32)
+        a = fitz.Rect(0, 32, panel_w, panel_h+32)
+        b = fitz.Rect(panel_w+24, 32, 2*panel_w+24, panel_h+32)
         frame.show_pdf_page(a, before, source_number-1)
         frame.show_pdf_page(b, after, i)
         frame.insert_text((8, 20), f"SOURCE PAGE {source_number}", fontsize=10)
-        frame.insert_text((w+32, 20), f"DIGITAL DRAFT {i+1}", fontsize=10)
+        frame.insert_text((panel_w+32, 20), f"DIGITAL DRAFT {i+1}", fontsize=10)
     target.save(dest, garbage=3, deflate=True)
     target.close()
     after.close()
