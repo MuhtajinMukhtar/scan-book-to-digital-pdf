@@ -54,6 +54,33 @@ class DigitalStylesTests(unittest.TestCase):
         self.assertTrue(any(w[1]>560 for w in footer_words),footer_words)
         out.close();source.close()
 
+    def test_real_source_verified_bold_and_italic_font_in_pdf(self):
+        fontfile=engine.font_path("sans")
+        if any(engine.styled_font_file(fontfile,role) is None
+               for role in ("bold","bold_italic")):
+            self.skipTest("No local bold/bold-italic pair to verify")
+        original=fitz.open()
+        original.new_page(width=540,height=700)
+        lines=[{"text":("The important message has bold and italic emphasis."
+                        if i==4 else f"A typical book paragraph with words on line {i+1}."),
+                "x":.10,"y":.12+i*.039,"width":.75,"height":.028}
+               for i in range(10)]
+        out=fitz.open()
+        ok,reason=engine.typeset_page(
+            out,original,0,lines,fontfile,fitz.Font(fontfile=str(fontfile)),12,False,
+            italic_phrases=["important"],
+            bold_phrases=["important","message"]
+        )
+        self.assertTrue(ok,reason)
+        spans=[span for block in out[0].get_text("dict")["blocks"]
+               if block["type"]==0 for line in block["lines"]
+               for span in line["spans"]]
+        fonts={span["font"] for span in spans}
+        self.assertTrue(any("Bold" in f for f in fonts),fonts)
+        self.assertTrue(any(("Bold" in f and ("Italic" in f or "Oblique" in f))
+                            for f in fonts),fonts)
+        out.close();original.close()
+
     def test_unverified_style_cannot_be_inserted(self):
         from page_typography import verified_italics
         with self.assertRaisesRegex(ValueError,"source-verified"):
