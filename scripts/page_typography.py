@@ -129,3 +129,43 @@ def styled_tokens(text: str, italic_phrases: list[str]) -> list[tuple[str,bool]]
                     or a < m.end() and b > m.start() for a,b in spans)
         result.append((chunk,is_italic))
     return result
+
+
+def verified_bolds(annotations: dict, source_page: int) -> list[str]:
+    """Only exact bold phrases confirmed against the actual source scan."""
+    entry = annotations.get("pages", {}).get(str(source_page), {})
+    phrases = []
+    for span in entry.get("bold_spans", []):
+        if span.get("source_scan_verified") is not True or not span.get("text"):
+            raise ValueError("Bold annotation requires exact source-verified text")
+        phrases.append(str(span["text"]))
+    return phrases
+
+
+def styled_runs(text: str, italic_phrases: list[str],
+                bold_phrases: list[str]) -> list[tuple[str, bool, bool]]:
+    """Whitespace-aware runs with independent bold/italic flags.
+
+    Preserve the legacy styled_tokens() interface for existing consumers.
+    """
+    def offsets(phrases):
+        spans=[]
+        for phrase in phrases:
+            pos=0
+            while True:
+                start=text.find(phrase,pos)
+                if start < 0:
+                    break
+                spans.append((start,start+len(phrase)))
+                pos=start+len(phrase)
+        return spans
+    italics=offsets(italic_phrases)
+    bolds=offsets(bold_phrases)
+    def intersects(a,b,spans):
+        return any(x<b and y>a for x,y in spans)
+    return [
+        (match.group(0),
+         intersects(match.start(),match.end(),italics) and not match.group(0).isspace(),
+         intersects(match.start(),match.end(),bolds) and not match.group(0).isspace())
+        for match in re.finditer(r"\S+|\s+",text)
+    ]
