@@ -41,6 +41,21 @@ class TypographyTests(unittest.TestCase):
         self.assertLess(max(gaps)-min(gaps),0.01)
         self.assertEqual([r["text"] for r in laid],[r["text"] for r in sample])
 
+    def test_one_shifted_line_in_ordinary_prose_is_normalized_without_reflow(self):
+        """Printed-page-27-style OCR x outlier; preserve source line order."""
+        starts=[55,55,72,55,55]
+        lines=[{"text":f"A typical prose paragraph with line {i} and useful content.",
+                "x":x/500,"y":(95+i*23)/700,
+                "width":.70,"height":.026}
+               for i,x in enumerate(starts)]
+        result=plan_body(lines,500,700,13,body_margin=55)
+        self.assertEqual([x["text"] for x in result],
+                         [x["text"] for x in lines])
+        self.assertLess(max(x["draw_x"] for x in result)-
+                        min(x["draw_x"] for x in result),1)
+        self.assertAlmostEqual(result[2]["draw_x"],55)
+        self.assertTrue(all(0<x["baseline"]<700 for x in result))
+
     def test_source_verified_italic_only(self):
         self.assertRaisesRegex(ValueError,"source-verified",
             verified_italics, {"pages":{"124":{"italic_spans":[{"text":"advertising"}]}}},124)
