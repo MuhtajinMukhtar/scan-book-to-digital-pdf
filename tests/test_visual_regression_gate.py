@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+from io import BytesIO
 import json
 from pathlib import Path
 import sys
@@ -9,6 +10,7 @@ import tempfile
 import unittest
 
 import fitz
+from PIL import Image
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location(
@@ -41,8 +43,10 @@ class GoldenVisualGateTests(unittest.TestCase):
                               "An original source paragraph in digital type",
                               fontsize=font_size)
             if art and number==0:
-                p.draw_rect(fitz.Rect(750,525,1110,735),color=(0.3,0.3,0.3),
-                            fill=(.77,.79,.8))
+                raster=Image.new("RGB",(350,220),(.77*255,.79*255,.80*255))
+                data=BytesIO()
+                raster.save(data,format="PNG")
+                p.insert_image(fitz.Rect(750,525,1110,735),stream=data.getvalue())
         doc.save(path)
         doc.close()
         return path
@@ -67,6 +71,18 @@ class GoldenVisualGateTests(unittest.TestCase):
         report=mod.verify(bad,baseline,self.source)
         self.assertEqual(report["status"],"PILOT_VISUAL_REGRESSION")
         self.assertTrue(any(x.get("issue")=="font_regressed" for x in report["issues"]))
+
+    def test_lost_illustration_is_blocked(self):
+        golden=self.make("golden.pdf",16,art=True)
+        no_art=self.make("without_illustration.pdf",16,art=False)
+        baseline={"schema_version":1,"format":"side_by_side_comparison",
+                  "source_sha256":mod.sha256(self.source),
+                  "source_page_order":[1,2],
+                  "page_metrics":mod.extract(golden,[1,2])}
+        report=mod.verify(no_art,baseline,self.source)
+        self.assertEqual(report["status"],"PILOT_VISUAL_REGRESSION")
+        self.assertTrue(any(x.get("issue")=="illustration_or_graphic_area_lost"
+                            for x in report["issues"]))
 
     def test_wrong_source_pdf_cannot_reuse_golden_reference(self):
         golden=self.make("golden.pdf",16)
