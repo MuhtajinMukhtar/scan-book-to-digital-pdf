@@ -25,7 +25,7 @@ from digital_text_policy_gate import assess as assess_digital_text, allowed_cove
 HERE = Path(__file__).resolve().parent
 # Rollback to the original pre-global-leading paragraph placement engine.
 # Existing approvals from the regressed revision 4 are not reusable.
-PILOT_LAYOUT_REVISION = 3
+PILOT_LAYOUT_REVISION = 5
 
 
 def run_ocr(source: Path, work: Path, pages: list[int], dpi: int,
@@ -124,6 +124,7 @@ def pilot(args: argparse.Namespace) -> int:
         "font_file": str(local_font.resolve()),
         "font_file_sha256": sha256(local_font),
         "body_font_size_pt": report["body_font_size_pt"],
+        "book_style": report["book_style"],
         "style_annotations_sha256": (sha256(source_styles) if source_styles.is_file() else None),
         "cover_evidence_sha256": (sha256(cover_file) if cover_file.is_file() else None),
         "verified_cover_pages": verified_covers,
@@ -184,6 +185,9 @@ def pilot(args: argparse.Namespace) -> int:
             if fallback_source_pages else None
         ),
         "style_profile_sha256": sha256(style_path),
+        "body_alignment_detected": report["book_style"]["alignment"],
+        "background": report["book_style"]["background"],
+        "style_source_review_required": report["book_style"]["source_review_required"],
         "pilot_pdf": str(out),
         "comparison_pdf": str(pilot_dir / "Book_Pilot_Comparison.pdf"),
         "note": ("Two pages are a technical smoke test, NOT enough for final "
@@ -249,6 +253,8 @@ def full(args: argparse.Namespace) -> int:
     source_sha = sha256(args.source)
     if style.get("engine_version") != PILOT_LAYOUT_REVISION:
         raise ValueError("Previously approved pilot uses a different layout revision; rerender and reapprove")
+    if not isinstance(style.get("book_style"),dict):
+        raise ValueError("Pilot has no source-detected typography profile; rerender")
     if approval.get("source_sha256") != source_sha or approval.get("decision") != "PILOT_APPROVED":
         raise ValueError("Pilot approval is absent or belongs to a different PDF")
     if approval.get("style_profile_sha256") != sha256(style_path) or style.get("source_sha256") != source_sha:
@@ -282,12 +288,29 @@ def full(args: argparse.Namespace) -> int:
                               args.cpu_threads, args.enable_mobile,
                               args.allow_model_download, args.max_mobile_pages,
                               skip_vision=args.reuse_apple)
-    out = args.output or (args.work_dir / "output" / "Book_Full_REVIEW.pdf")
+    primary_pdf = args.work_dir / "output" / "Book_Full_REVIEW.pdf"
+    if args.white_variant:
+        if not args.skip_ocr:
+            raise ValueError("White-paper copy must reuse OCR (--skip-ocr)")
+        primary_policy = primary_pdf.with_suffix(".digital-policy.json")
+        if not primary_policy.is_file():
+            raise ValueError("Create and verify the warm-paper book first")
+        checked = json.loads(primary_policy.read_text(encoding="utf-8"))
+        if (checked.get("source_sha256") != source_sha or
+                checked.get("status") != "READY_FOR_EDITORIAL_FIDELITY_REVIEW"):
+            raise ValueError("Warm-paper output has not passed digital-text QA")
+    out = args.output or (args.work_dir / "output" /
+                          ("Book_Full_WHITE_REVIEW.pdf" if args.white_variant
+                           else "Book_Full_REVIEW.pdf"))
+    if args.white_variant and out.resolve() == primary_pdf.resolve():
+        raise ValueError("White-paper variant may not overwrite the original warm copy")
     result = build(args.source, args.work_dir, out, "full", pages,
                    style["font_family"], local_font, style["body_font_size_pt"],
                    approval=approval_path, strict_hybrid=False,
                    fusion_subdir="fusion_mobile", style_annotations=source_styles,
-                   verified_cover_pages=set(verified_covers))
+                   verified_cover_pages=set(verified_covers),
+                   book_style=style["book_style"],
+                   background_override="white" if args.white_variant else None)
     policy = assess_digital_text(
         args.source, out, out.with_suffix(".qa.json"),
         cover_file if cover_file.is_file() else None
@@ -303,6 +326,7 @@ def full(args: argparse.Namespace) -> int:
         "incomplete_noncover_pages": policy["incomplete_noncover_pages"],
         "verified_cover_pages": policy["exempt_cover_pages"],
         "digital_policy_report": str(policy_file),
+        "background": "white" if args.white_variant else style["book_style"]["background"],
         "secondary_pending_pages": (ocr_summary or {}).get("secondary_pending_pages", []),
         "pdf": str(out),
         "note": ("Draft preserved for correction; NOT a completed digital book"
@@ -346,6 +370,8 @@ def main() -> int:
             p.add_argument("--note")
         if name == "full":
             p.add_argument("--output", type=Path)
+            p.add_argument("--white-variant", action="store_true",
+                           help="Only when requested, after warm-paper book passes QA")
     args = parser.parse_args()
     if not args.source.is_file():
         parser.error("Source PDF not found")
