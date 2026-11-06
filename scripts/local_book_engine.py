@@ -312,45 +312,87 @@ def digital_footer(page: fitz.Page, src: fitz.Page, items: list[dict],
 
 def typeset_page(out: fitz.Document, original: fitz.Document, idx: int, lines: list[dict],
                  fontfile: Path, font: fitz.Font, size: float, keep_footer: bool,
-                 italic_phrases: list[str] | None = None) -> tuple[bool, str]:
+                 italic_phrases: list[str] | None = None,
+                 bold_phrases: list[str] | None = None,
+                 book_style: dict | None = None) -> tuple[bool, str]:
     src = original[idx]
     page = out.new_page(width=src.rect.width,height=src.rect.height)
+    style = book_style or {
+        "alignment": "source_uncertain", "background": "cream",
+        "margin_left_ratio": .12, "margin_right_ratio": .12,
+        "leading_pt": size*1.4, "paragraph_gap_pt": size*1.8,
+        "pages_observed": 0
+    }
+    validate_style(style)
+    page.draw_rect(page.rect,color=None,fill=palette(style["background"]),overlay=False)
     page.insert_font(fontname="BookBody",fontfile=str(fontfile))
     italic_phrases = italic_phrases or []
-    for phrase in italic_phrases:
+    bold_phrases = bold_phrases or []
+    for phrase in italic_phrases + bold_phrases:
         if not any(phrase in entry["text"] for entry in lines):
-            return False, "reviewed italic phrase not present in OCR on this page"
+            return False, "source-verified emphasized phrase not present in OCR on this page"
     italic_file = italic_font_file(fontfile)
     if italic_phrases and italic_file is None:
         return False, "matching italic font unavailable; source styles need review"
     italic_font = fitz.Font(fontfile=str(italic_file)) if italic_file else None
     if italic_font is not None and italic_phrases:
         page.insert_font(fontname="BookItalic",fontfile=str(italic_file))
+    bold_file = styled_font_file(fontfile, "bold")
+    both_file = styled_font_file(fontfile, "bold_italic")
+    if bold_phrases and bold_file is None:
+        return False, "matching bold font unavailable; source styles need review"
+    if bold_phrases and italic_phrases and both_file is None and any(
+        bold in italic or italic in bold
+        for bold in bold_phrases for italic in italic_phrases
+    ):
+        return False, "matching bold italic font unavailable; source styles need review"
+    bold_font = fitz.Font(fontfile=str(bold_file)) if bold_file else None
+    both_font = fitz.Font(fontfile=str(both_file)) if both_file else None
+    if bold_phrases and bold_file:
+        page.insert_font(fontname="BookBold",fontfile=str(bold_file))
+    if both_file and bold_phrases and italic_phrases:
+        page.insert_font(fontname="BookBoldItalic",fontfile=str(both_file))
     body,footer = split_footer(lines)
     if len(body) < 7:
         return False, "insufficient body OCR for true digital typesetting"
     try:
-        positions=plan_body(body,src.rect.width,src.rect.height,size)
+        measured = style.get("pages_observed", 0) >= 2
+        positions=plan_body(
+            body,src.rect.width,src.rect.height,size,
+            body_margin=(style["margin_left_ratio"]*src.rect.width if measured else None),
+            preferred_leading=(style["leading_pt"] if measured else None),
+            preferred_paragraph_gap=(style["paragraph_gap_pt"] if measured else None)
+        )
     except ValueError as exc:
         return False,str(exc)
     if keep_footer and src.rect.height>100:
         strip = fitz.Rect(0,src.rect.height-36,src.rect.width,src.rect.height)
-        page.show_pdf_page(strip,original,idx,clip=strip,overlay=False,keep_proportion=False)
+        page.show_pdf_page(strip,original,idx,clip=strip,overlay=True,keep_proportion=False)
     # Estimate the right body text edge from source long lines. Do not change
     # mirrored left/right margins or force justification on short closing lines.
     sorted_edges = sorted([float(line["x"]+line["width"])*src.rect.width for line in body
                            if len(line["text"])>=25])
-    right_edge = (sorted_edges[max(0,int(len(sorted_edges)*.75)-1)]
-                  if sorted_edges else src.rect.width*.90)
+    right_edge = (
+        src.rect.width*(1-style["margin_right_ratio"])
+        if style.get("alignment") == "justify" and style.get("pages_observed",0) >= 2
+        else (sorted_edges[max(0,int(len(sorted_edges)*.75)-1)]
+              if sorted_edges else src.rect.width*.90)
+    )
     for record in positions:
         text = record["text"]
         x,baseline = record["draw_x"],record["baseline"]
         maxwidth=src.rect.width-max(24,src.rect.width*.055)-x
-        target = (right_edge if not record["paragraph_last"] and
-                  record["paragraph_line_count"]>1 and len(text.split())>=5 else None)
+        # Only a source-verified justified book gets extended word gaps.
+        # A ragged-right or uncertain book uses natural word spacing.
+        target = (right_edge if style["alignment"] == "justify"
+                  and not record["paragraph_last"]
+                  and record["paragraph_line_count"]>1 and len(text.split())>=5
+                  else None)
         try:
             ok=paint_line(page,text,x,baseline,maxwidth,font,size,
-                          italic_phrases,italic_font,justify_to=target)
+                          italic_phrases,italic_font,justify_to=target,
+                          bold_phrases=bold_phrases,bold_font=bold_font,
+                          bold_italic_font=both_font)
         except ValueError as exc:
             return False,str(exc)
         if not ok:
