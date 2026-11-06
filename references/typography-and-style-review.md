@@ -7,11 +7,33 @@ For the AI agent. The user should only see the PDF pilot and approve or request 
 - Keep all text on the **same physical source page** with source page dimensions unchanged.
 - Group consecutive OCR lines into paragraphs and regularize baseline spacing within a paragraph instead of repeating OCR y-coordinate jitter.
 - Stabilize continuation lines' left edge while preserving intentional **mirrored gutters** on facing pages.
-- Modestly justify sufficiently long nonfinal paragraph lines; keep final lines left-aligned. Never silently shrink or overflow text.
+- Detect **left-aligned/ragged right versus justified** body text from source OCR geometry and visually verify in the scan. Apply justify **only** for source-justified prose; cap word-space stretching and keep paragraph-final lines natural. If detection is uncertain, use natural spacing until verified. Never silently shrink or overflow text.
 - Attempt an unambiguous **printed page number** as visible/selectable text. Preserve footer ornament from the source and flag `footer_number_still_raster_review_needed` when replacing the number is unsafe.
-- Render **source-verified italic spans**. Apple Vision alone does not reliably identify italic styles; never infer italics from keywords or language.
+- Render **source-verified bold and italic spans**. OCR confidence alone does not reliably identify typeface weight/style; verify these details visually from the scan instead of guessing.
+- Keep word spaces normal (including accidental multi-space OCR artifacts), stabilize ordinary body margins from several source pages, and normalize only small baseline/paragraph-gap jitter. Preserve genuine indentations, centered quotations and decorative layouts.
+- **Default background:** uniform very pale warm cream on normal digital pages. Preserve special page artwork and panel colors. An optional white-paper version is offered only **after** the main book has been produced and checked, not during pilot selection.
 
-## Source-verified italic spans
+## Konsistensi mengikuti buku sumber, bukan contoh buku tertentu
+
+Gaya isi buku diperkirakan dari beberapa **halaman paragraf biasa** dan dikunci di `work/pilot/style-profile.json` bersama SHA-256 PDF sumber. Jika buku sumber rata kiri, baris akhir tidak dipaksa menjadi rata kanan. Jika sumber justify, tambahkan spasi hanya secukupnya agar tetap nyaman dibaca; jangan memaksakan pelebaran berlebihan untuk mencapai margin kanan.
+
+Margin kiri/kanan, leading dan jarak antarparagraf mengikuti pola dominan halaman biasa, tetapi tidak mengubah desain khusus. Normalisasi posisi dibatasi kecil untuk menghindari kemunduran visual akibat pemadatan global. **Pemrosesan tetap tidak boleh memindahkan isi ke halaman berikutnya.**
+
+Jika geometri OCR tidak cukup untuk menyimpulkan gaya (profil bertanda `source_uncertain`), agen memeriksa PDF sumber dan boleh mencatat pilihan terverifikasi di `work/book-style-override.json`:
+
+~~~json
+{
+  "source_sha256": "<actual SHA-256 of current source>",
+  "source_scan_verified": true,
+  "alignment": "justify"
+}
+~~~
+
+Nilai `alignment` bisa `left` atau `justify` sesuai buku. Margin/spasi juga dapat dikunci secara opsional setelah pemeriksaan visual. **Jangan membuat override berdasarkan kebiasaan model atau gaya buku sebelumnya.** Render ulang pilot dengan `--skip-ocr`, kemudian minta approval atas PDF hasil baru. Setelah disetujui, perubahan override membatalkan izin pemrosesan buku penuh.
+
+Versi putih bersih adalah **varian opsional setelah buku krem berhasil dan lolos QA**, hanya jika pengguna memilihnya. Jalur agen: `python scripts/run_book.py full --source BOOK.pdf --work-dir ./work --skip-ocr --white-variant`. Teks dan geometry harus tetap sama; periksa kembali footer sumber karena ornamen raster bisa masih berwarna krem. Jangan jalankan dua OCR atau mengubah layout hanya untuk berganti warna.
+
+## Source-verified bold and italic spans
 
 Only after comparing the actual source scan with the pilot, create `work/style-annotations.json`, if necessary:
 
@@ -22,6 +44,9 @@ Only after comparing the actual source scan with the pilot, create `work/style-a
     "12": {
       "italic_spans": [
         {"text": "Example emphasized phrase", "source_scan_verified": true}
+      ],
+      "bold_spans": [
+        {"text": "Example chapter heading", "source_scan_verified": true}
       ]
     }
   }
