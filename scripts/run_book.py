@@ -25,7 +25,7 @@ from digital_text_policy_gate import assess as assess_digital_text, allowed_cove
 HERE = Path(__file__).resolve().parent
 # Rollback to the original pre-global-leading paragraph placement engine.
 # Existing approvals from the regressed revision 4 are not reusable.
-PILOT_LAYOUT_REVISION = 5
+PILOT_LAYOUT_REVISION = 6
 
 
 def run_ocr(source: Path, work: Path, pages: list[int], dpi: int,
@@ -127,6 +127,7 @@ def pilot(args: argparse.Namespace) -> int:
         "font_file_sha256": sha256(local_font),
         "body_font_size_pt": report["body_font_size_pt"],
         "book_style": report["book_style"],
+        "canonical_page_size": report["canonical_page_size"],
         "book_style_override_sha256": (sha256(source_style_override)
                                       if source_style_override.is_file() else None),
         "style_annotations_sha256": (sha256(source_styles) if source_styles.is_file() else None),
@@ -190,6 +191,8 @@ def pilot(args: argparse.Namespace) -> int:
         ),
         "style_profile_sha256": sha256(style_path),
         "body_alignment_detected": report["book_style"]["alignment"],
+        "uniform_book_paper": report["canonical_page_size"],
+        "page_size_visual_review_pages": report["page_size_visual_review_pages"],
         "background": report["book_style"]["background"],
         "style_source_review_required": report["book_style"]["source_review_required"],
         "pilot_pdf": str(out),
@@ -259,6 +262,8 @@ def full(args: argparse.Namespace) -> int:
         raise ValueError("Previously approved pilot uses a different layout revision; rerender and reapprove")
     if not isinstance(style.get("book_style"),dict):
         raise ValueError("Pilot has no source-detected typography profile; rerender")
+    if not isinstance(style.get("canonical_page_size"),dict):
+        raise ValueError("Pilot has no canonical paper size; rerender and reapprove")
     if approval.get("source_sha256") != source_sha or approval.get("decision") != "PILOT_APPROVED":
         raise ValueError("Pilot approval is absent or belongs to a different PDF")
     if approval.get("style_profile_sha256") != sha256(style_path) or style.get("source_sha256") != source_sha:
