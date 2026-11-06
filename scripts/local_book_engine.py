@@ -630,11 +630,19 @@ def comparison(source: Path, output: Path, page_numbers: list[int], dest: Path) 
     before = fitz.open(source)
     after = fitz.open(output)
     target = fitz.open()
+    # Review sheets also need a stable canvas: varying scan crop sizes must
+    # not produce a PDF comparison whose own pages change paper dimensions.
+    panel_w = max(
+        max(before[number-1].rect.width for number in page_numbers),
+        max(page.rect.width for page in after)
+    )
+    panel_h = max(
+        max(before[number-1].rect.height for number in page_numbers),
+        max(page.rect.height for page in after)
+    )
     for i, source_number in enumerate(page_numbers):
         original = before[source_number-1]
         result = after[i]
-        panel_w = max(original.rect.width, result.rect.width)
-        panel_h = max(original.rect.height, result.rect.height)
         frame = target.new_page(width=2*panel_w+24, height=panel_h+32)
         a = fitz.Rect(0, 32, panel_w, panel_h+32)
         b = fitz.Rect(panel_w+24, 32, 2*panel_w+24, panel_h+32)
