@@ -35,6 +35,14 @@ When the user attaches a scanned book and this repo link, proceed with the workf
 
 Read `references/typography-and-style-review.md` for these details. Keep the workflow fully nontechnical for the user.
 
+## One book, one physical PDF paper size — required
+
+All output pages, **including covers, chapter openers, figures and tables**, must have the **same MediaBox/CropBox and visible paper dimensions**. The source may have irregular page canvases caused by scanning; **do not replicate those variations**. Use `scripts/book_page_size.py`: select one canonical paper size from the source body's median widths/heights (excluding verified covers), then place each completed page proportionally on that paper without stretching, clipping, rasterizing its text, moving content to another page or changing total page count. Lock the selected paper size in the approved pilot style profile.
+
+Automatic QA now verifies identical physical dimensions across all output pages; inspect pages flagged for substantial scaling or large new margins. **Same source-page mapping does not mean identical source MediaBox dimensions.** See `references/uniform-book-paper.md`.
+
+**For an already-running Work conversion:** do not restart OCR or interrupt the full-book job solely because this code changed. After Work completes, the agent can use `scripts/uniform_page_size.py` with the original scanned PDF as `--reference` and the existing digital result as `--input` to create a **separate** uniformly sized PDF without OCR. Confirm page count, text, images and page-size QA. Never overwrite the user's source or current finished result.
+
 ## Visual regression rule: restore the last preferred pilot
 
 **Only when the user explicitly provides or requests a prior approved/preferred pilot after the blind test**, use it as a visual baseline. When a revised pilot looks worse, do not replace it merely to obtain more digitally typeset pages. Preserve the earlier PDF and all OCR/source caches; restore that PDF as the visual reference while recording any still-incomplete digital pages honestly. Never approve full-book conversion from a scan-fallback preview.
