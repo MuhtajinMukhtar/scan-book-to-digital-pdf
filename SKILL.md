@@ -35,6 +35,14 @@ When the user attaches a scanned book and this repo link, proceed with the workf
 
 Read `references/typography-and-style-review.md` for these details. Keep the workflow fully nontechnical for the user.
 
+## Printed footer numbering consistency — required
+
+A single book's ordinary page numbers must use **one book-level font size, footer baseline, and outer-edge inset**, with source-appropriate **left/right mirrored odd/even placement**. Infer this from OCR of *the current book*; do not hardcode right-only placement or impose another book's pagination. Preserve the **actual printed source number**, including front matter, gaps or numbering resets; **never substitute the physical PDF page index** or invent numbers when the source is blank/uncertain.
+
+The engine uses `scripts/footer_policy.py` to infer and lock a shared footer profile in the approved pilot style. For each reliably recognized number, preserve original footer artwork, mask the old scanned number only when the local background can be safely sampled, then insert a real selectable vector number at the book-wide anchor. Physical-paper normalization must not reintroduce varying footer positions or sizes. `digital_text_policy_gate.py` checks number presence, left/right inset, font and baseline consistency; ambiguities remain explicitly marked for source review.
+
+Covers, unnumbered chapter openers and special decorative layouts must **not be assigned new numbers automatically**. When the source footer cannot be replaced safely, report it for manual visual QA rather than claiming the footer is fixed. The in-progress Work PDF is not silently modified by a repo update; preserve its output and rerender from source-verified OCR caches (without repeating OCR) if footer corrections are requested afterward.
+
 ## One book, one physical PDF paper size — required
 
 All output pages, **including covers, chapter openers, figures and tables**, must have the **same MediaBox/CropBox and visible paper dimensions**. The source may have irregular page canvases caused by scanning; **do not replicate those variations**. Use `scripts/book_page_size.py`: select one canonical paper size from the source body's median widths/heights (excluding verified covers), then place each completed page proportionally on that paper without stretching, clipping, rasterizing its text, moving content to another page or changing total page count. Lock the selected paper size in the approved pilot style profile.
