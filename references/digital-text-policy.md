@@ -35,7 +35,7 @@ Use real source hash and visual description; never invent a verified cover from 
 
 ## Mandatory full-book completion gate
 
-`scripts/run_book.py full` automatically invokes `scripts/digital_text_policy_gate.py`. It checks source-to-output physical page mapping and dimensions, the per-page compositor QA modes, visible vector PDF text, effective image coverage and validated cover evidence.
+`scripts/run_book.py full` automatically invokes `scripts/digital_text_policy_gate.py`. It checks source-to-output physical page mapping, **the uniform output MediaBox/CropBox size for every page including cover**, the per-page compositor QA modes, visible vector PDF text, effective image coverage and validated cover evidence.
 
 The gate rejects any non-cover page that is an unchanged searchable scan, a nearly-full-page raster with a small digital overlay, or has no visible selectable PDF text. It accounts for actual clipping of footer images so that preserving a narrow decorative footer does **not** count as a retained scanned whole page.
 
