@@ -12,6 +12,14 @@ Rollback terakhir memulihkan mesin tipografi sebelum percobaan perubahan jarak b
 
 Ubah PDF buku hasil scan menjadi **PDF digital dengan teks nyata yang dapat dipilih, dicari, dan disalin**. Tetap jaga ilustrasi, tabel, ejaan, dan isi **pada halaman sumber masing-masing**.
 
+## Acuan visual untuk mencegah hasil semakin buruk
+
+Pada pengujian *Hearty Service* 220 halaman, pengguna lebih menyukai **Pilot Comparison (2)** daripada **(3)**. Versi (3) mengecilkan ukuran teks isi dari sekitar **16,2 pt menjadi 13–14 pt** di beberapa halaman dan mengurangi proporsi sebagian desain. **Rollback kode tidak otomatis mengembalikan PDF Work sebelumnya.**
+
+Untuk **PDF Hearty Service yang SHA-256 sumbernya identik**, repo menyimpan [metrik pilot yang lebih disukai](references/hearty-service-220-preferred-pilot-metrics.json) tanpa halaman scan atau teks berhak cipta, serta [alat pembanding visual](scripts/visual_regression_gate.py). Work dapat menilai hasil baru pada tujuh halaman yang sama untuk mendeteksi pengecilan huruf, pemadatan area teks, atau hilangnya ilustrasi.
+
+**Alat ini bukan mesin reproduksi desain.** Hasilnya masih harus diperiksa secara visual dan diverifikasi terhadap sumber. Buku lain tidak boleh menggunakan ukuran atau metrik khusus Hearty Service secara otomatis.
+
 ## Untuk orang nonteknis
 
 **Cukup unggah file PDF dan berikan link repo ini ke ChatGPT Work / Codex:**
