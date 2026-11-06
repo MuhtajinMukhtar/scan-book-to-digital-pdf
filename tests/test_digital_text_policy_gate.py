@@ -82,6 +82,18 @@ class StrictDigitalPolicyTests(unittest.TestCase):
         self.assertEqual(result["status"],"INCOMPLETE_DIGITAL_PAGES")
         self.assertIn(1,result["incomplete_noncover_pages"])
 
+    def test_single_output_page_with_different_mediabox_fails_uniform_paper(self):
+        self.compose(["verified_cover_raster_exempt","born_digital_unverified",
+                      "born_digital_unverified"])
+        with fitz.open(self.out) as doc:
+            doc[2].set_mediabox(fitz.Rect(0,0,430,640))
+            doc.saveIncr()
+        result=gate.assess(self.src,self.out,self.qa,self.cover)
+        self.assertEqual(result["status"],"INCOMPLETE_DIGITAL_PAGES")
+        self.assertIn(3,result["incomplete_noncover_pages"])
+        self.assertIn("page_size_not_uniform",
+                      {issue["type"] for issue in result["issues"]})
+
     def test_fallback_table_cannot_count_as_completed(self):
         self.compose(["verified_cover_raster_exempt","born_digital_unverified","searchable_scan_fallback"])
         result=gate.assess(self.src,self.out,self.qa,self.cover)
