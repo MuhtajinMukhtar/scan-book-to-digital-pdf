@@ -52,11 +52,13 @@ class ExistingOutputPaperTests(unittest.TestCase):
                 p=book.new_page(width=500,height=700)
                 p.insert_text((40,90),f"A book page number {n+1}",fontsize=12)
             book.save(source);book.close()
+            existing=root/"existing-digital.pdf"
+            existing.write_bytes(source.read_bytes())
             out=root/"new.pdf"
-            report=normalize_existing(source,source,out)
+            report=normalize_existing(source,existing,out)
             self.assertFalse(report["changed_paper_dimensions"])
             self.assertTrue(out.exists())
-            self.assertEqual(out.read_bytes(),source.read_bytes())
+            self.assertEqual(out.read_bytes(),existing.read_bytes())
 
 
 if __name__ == "__main__":
