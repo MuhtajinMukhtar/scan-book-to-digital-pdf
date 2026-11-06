@@ -59,6 +59,8 @@ class OneClickWorkflowTests(unittest.TestCase):
             self.assertEqual(smoke_status["pilot_stage"],"smoke")
             full_before=run("full",*common,"--skip-ocr")
             self.assertEqual(full_before.returncode,2)
+            white_before=run("full",*common,"--skip-ocr","--white-variant")
+            self.assertEqual(white_before.returncode,2)
             reject=run("approve",*common,"--confirm","NO")
             self.assertEqual(reject.returncode,2)
             premature=run("approve",*common,"--confirm","APPROVE_PILOT")
@@ -77,6 +79,20 @@ class OneClickWorkflowTests(unittest.TestCase):
             with fitz.open(work/"output/Book_Full_REVIEW.pdf") as result:
                 self.assertEqual(len(result),2)
                 self.assertGreater(len(result[0].get_text("text")),100)
+                cream_text=[p.get_text("text") for p in result]
+                cream_pixel=result[0].get_pixmap(
+                    clip=fitz.Rect(2,2,3,3),colorspace=fitz.csRGB,alpha=False
+                ).samples[:3]
+            white=run("full",*common,"--skip-ocr","--white-variant")
+            self.assertEqual(white.returncode,0,white.stdout+"\n"+white.stderr)
+            with fitz.open(work/"output/Book_Full_WHITE_REVIEW.pdf") as other:
+                self.assertEqual([p.get_text("text") for p in other],cream_text)
+                white_pixel=other[0].get_pixmap(
+                    clip=fitz.Rect(2,2,3,3),colorspace=fitz.csRGB,alpha=False
+                ).samples[:3]
+            self.assertNotEqual(tuple(cream_pixel),tuple(white_pixel))
+            self.assertTrue(all(value==255 for value in white_pixel))
+            self.assertTrue(all(value>=240 for value in cream_pixel))
             style=work/"pilot/style-profile.json"
             profile=json.loads(style.read_text())
             original_version=profile["engine_version"]
