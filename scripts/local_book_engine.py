@@ -20,7 +20,7 @@ import sys
 
 import fitz
 from PIL import Image, ImageDraw
-from page_typography import split_footer, plan_body, verified_italics, styled_tokens, LAYOUT_REVISION
+from page_typography import split_footer, plan_body, verified_italics, styled_tokens
 
 
 def sha256(path: Path) -> str:
@@ -477,7 +477,7 @@ def build(source: Path, work: Path, dest: Path, mode: str, page_list: list[int],
               "fallback_pages": counts["searchable_scan_fallback"],
               "per_page": rows,
               "verified_cover_pages": sorted(verified_cover_pages),
-              "typography_layout_version": LAYOUT_REVISION,
+              "typography_layout_version": 2,
               "style_annotations_sha256": sha256(style_annotations) if style_annotations and style_annotations.exists() else None}
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
     doc.close()
