@@ -19,23 +19,21 @@ Only after comparing the actual source scan with the pilot, create `work/style-a
 {
   "source_sha256": "<actual SHA-256 of original scanned PDF>",
   "pages": {
-    "124": {
+    "12": {
       "italic_spans": [
-        {"text": "image", "source_scan_verified": true},
-        {"text": "advertising", "source_scan_verified": true},
-        {"text": "hati yang terjaga", "source_scan_verified": true}
+        {"text": "Example emphasized phrase", "source_scan_verified": true}
       ]
     }
   }
 }
 ~~~
 
-Page 124 here is an *example* from the discussion. **Never copy these phrases into a different book without inspecting its actual source.** The exact phrase must appear in the OCR of that physical page. The agent should identify formatting from the source sample, add entries only when supported, and seek review if ambiguous.
+Page 12 and the sample phrase are fictional syntax examples. **Never copy these annotations into a real book without inspecting its source.** The exact phrase must appear in the OCR of that physical page. The agent should identify formatting from the source sample, add entries only when supported, and seek review if ambiguous.
 
 Rerender without OCR:
 
 ~~~sh
-python scripts/run_book.py pilot --source BOOK.pdf --work-dir ./work --skip-ocr --pages 90,124
+python scripts/run_book.py pilot --stage review --source BOOK.pdf --work-dir ./work --skip-ocr
 ~~~
 
 The pilot profile locks the annotation file SHA. Changing annotations after approval blocks full-book processing until a revised pilot is approved. If a matching local italic font isn't available, report the exception instead of silently stripping emphasis.
