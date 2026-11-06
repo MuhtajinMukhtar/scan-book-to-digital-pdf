@@ -7,7 +7,7 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scripts"))
-from book_style import observe_page, infer_style, validate_style, palette
+from book_style import observe_page, infer_style, validate_style, palette, source_verified_override
 from page_typography import plan_body, verified_bolds, styled_runs
 
 
@@ -74,6 +74,26 @@ class SourceTypographyTests(unittest.TestCase):
         self.assertTrue(all(.94<x<1 for x in cream))
         self.assertEqual(palette("white"),(1,1,1))
         self.assertNotEqual(cream,palette("white"))
+
+    def test_ambiguous_alignment_requires_source_visual_evidence(self):
+        detected=infer_style([prose_page(1,"left")])
+        self.assertEqual(detected["alignment"],"source_uncertain")
+        with self.assertRaisesRegex(ValueError,"source visual verification"):
+            source_verified_override(detected,{
+                "source_sha256":"abc","alignment":"justify"
+            },"abc")
+        approved=source_verified_override(detected,{
+            "source_sha256":"abc","source_scan_verified":True,
+            "alignment":"justify"
+        },"abc")
+        self.assertEqual(approved["alignment"],"justify")
+        self.assertFalse(approved["source_review_required"])
+        self.assertTrue(approved["visual_review_override"])
+        with self.assertRaisesRegex(ValueError,"another source"):
+            source_verified_override(detected,{
+                "source_sha256":"abc","source_scan_verified":True,
+                "alignment":"left"
+            },"other")
 
     def test_verified_bold_and_italic_can_overlap(self):
         annotations={"pages":{"7":{"bold_spans":[
